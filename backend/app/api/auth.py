@@ -7,8 +7,9 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.ext.asyncio import AsyncSession
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from datetime import datetime
 from app.core.database import get_db
-from app.core.security import decode_token
+from app.core.security import decode_token, verify_password
 from app.schemas.schemas import (
     UserCreate,
     UserResponse,
@@ -16,10 +17,13 @@ from app.schemas.schemas import (
     Token,
     TOTPSetupResponse,
     TOTPEnable,
-    UserPublicKey
+    UserPublicKey,
+    KeyRotationRequest,
+    KeyRotationResponse
 )
 from app.services.auth_service import AuthService
 from app.models.models import User, Message
+from app.core.config import settings
 from sqlalchemy import select, or_, and_
 from typing import List
 
@@ -293,3 +297,110 @@ async def get_message_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error al obtener historial de mensajes: {str(e)}"
         )
+
+
+# ===================== ROTACIÓN DE CLAVES =====================
+
+@router.post("/keys/rotate", response_model=KeyRotationResponse)
+async def rotate_keys(
+    rotation_request: KeyRotationRequest,
+    request: Request,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Rota las claves RSA del usuario actual.
+    
+    Políticas de Seguridad:
+    - Genera nuevo par de claves RSA-2048/4096
+    - Registra la rotación en el historial
+    - Audita la operación
+    - Requiere confirmación con contraseña
+    
+    Args:
+        rotation_request: Razón de la rotación y contraseña
+    
+    Returns:
+        Nuevas claves públicas y privadas
+    """
+    auth_service = AuthService(db)
+    
+    # Verificar contraseña del usuario para confirmar la rotación
+    if not verify_password(rotation_request.password, current_user.password_hash):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Contraseña incorrecta"
+        )
+    
+    ip_address = request.client.host
+    
+    # Rotar claves
+    rotation_result = await auth_service.rotate_user_keys(
+        user_id=current_user.id,
+        reason=rotation_request.reason,
+        ip_address=ip_address
+    )
+    
+    return rotation_result
+
+
+@router.get("/keys/rotation-history")
+async def get_rotation_history(
+    limit: int = 10,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Obtiene el historial de rotaciones de claves del usuario actual.
+    
+    Args:
+        limit: Número máximo de registros a devolver (default 10)
+    
+    Returns:
+        Lista de rotaciones ordenadas por fecha
+    """
+    auth_service = AuthService(db)
+    history = await auth_service.get_rotation_history(current_user.id, limit)
+    
+    return [
+        {
+            "id": h.id,
+            "rotated_at": h.rotated_at,
+            "rotation_reason": h.rotation_reason,
+            "old_public_key": h.old_public_key[:50] + "...",  # Truncar para respuesta
+            "new_public_key": h.new_public_key[:50] + "..."
+        }
+        for h in history
+    ]
+
+
+@router.get("/keys/check-expiration")
+async def check_key_expiration(
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Verifica si las claves del usuario actual están próximas a vencer.
+    
+    Returns:
+        Información sobre el estado de vencimiento de las claves
+    """
+    days_since_rotation = (datetime.utcnow() - current_user.key_rotation_date).days
+    days_until_expiration = settings.KEY_ROTATION_DAYS - days_since_rotation
+    
+    is_expired = days_until_expiration <= 0
+    is_expiring_soon = days_until_expiration <= 7 and not is_expired
+    
+    return {
+        "user_id": current_user.id,
+        "last_rotation": current_user.key_rotation_date,
+        "days_since_rotation": days_since_rotation,
+        "days_until_expiration": days_until_expiration,
+        "rotation_policy_days": settings.KEY_ROTATION_DAYS,
+        "is_expired": is_expired,
+        "is_expiring_soon": is_expiring_soon,
+        "message": (
+            "¡Claves vencidas! Rota tus claves inmediatamente." if is_expired
+            else f"Claves próximas a vencer en {days_until_expiration} días." if is_expiring_soon
+            else f"Claves vigentes. Próxima rotación en {days_until_expiration} días."
+        )
+    }

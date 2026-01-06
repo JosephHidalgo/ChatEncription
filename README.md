@@ -25,9 +25,12 @@ Sistema de chat en tiempo real con cifrado end-to-end (E2EE) implementando tecno
 
 1. **Gestión de Claves**
    - Generación de claves RSA automática en registro
-   - Rotación de claves cada 90 días (configurable)
+   - **✅ Rotación automática de claves cada 90 días** (implementado)
+   - **✅ Rotación manual disponible vía API** (implementado)
+   - **✅ Historial completo de rotaciones** (implementado)
    - Claves AES temporales por sesión (rotación cada 24 horas)
    - Almacenamiento seguro de claves públicas en BD
+   - **✅ Tarea programada para rotación automática** (Windows Task Scheduler)
 
 2. **Contraseñas**
    - Longitud mínima: 12 caracteres
@@ -60,23 +63,29 @@ Proyecto Final/
 ├── backend/                    # Servidor FastAPI
 │   ├── app/
 │   │   ├── api/               # Endpoints REST y WebSocket
-│   │   │   ├── auth.py       # Autenticación y registro
+│   │   │   ├── auth.py       # Autenticación, registro y rotación de claves
 │   │   │   └── websocket.py  # Chat en tiempo real
 │   │   ├── core/             # Configuración central
 │   │   │   ├── config.py     # Variables de entorno
 │   │   │   ├── security.py   # JWT y hashing
 │   │   │   └── database.py   # Conexión PostgreSQL
 │   │   ├── models/           # Modelos de base de datos
-│   │   │   └── models.py     # SQLAlchemy models
+│   │   │   └── models.py     # SQLAlchemy models (incluye KeyRotationHistory)
 │   │   ├── schemas/          # Validación de datos
 │   │   │   └── schemas.py    # Pydantic schemas
 │   │   ├── services/         # Lógica de negocio
-│   │   │   └── auth_service.py
+│   │   │   └── auth_service.py # Servicio de autenticación y rotación
 │   │   └── utils/            # Utilidades
 │   │       └── crypto.py     # Módulo de cifrado
 │   ├── main.py               # Aplicación FastAPI
+│   ├── init_db.py            # Inicializar base de datos
+│   ├── rotate_keys_auto.py   # ✅ Script de rotación automática
+│   ├── test_rotation.py      # ✅ Script de prueba de rotación
+│   ├── setup_rotation_task.ps1 # ✅ Configurar tarea programada
 │   ├── requirements.txt      # Dependencias Python
 │   └── .env                  # Variables de entorno
+│
+├── KEY_ROTATION_GUIDE.md     # ✅ Guía completa de rotación de claves
 │
 └── frontend/                  # Cliente Web
     ├── index.html            # Interfaz de usuario
@@ -174,6 +183,33 @@ GET /auth/users/public-key/{user_id}
 Authorization: Bearer <access_token>
 ```
 
+### Rotar Claves RSA (Manual)
+
+```bash
+POST /auth/keys/rotate
+Authorization: Bearer <access_token>
+Content-Type: application/json
+
+{
+  "password": "MiPassword123!@#",
+  "reason": "Rotación manual por actualización de seguridad"
+}
+```
+
+### Verificar Estado de Claves
+
+```bash
+GET /auth/keys/check-expiration
+Authorization: Bearer <access_token>
+```
+
+### Ver Historial de Rotaciones
+
+```bash
+GET /auth/keys/rotation-history?limit=10
+Authorization: Bearer <access_token>
+```
+
 ### Conectar a WebSocket
 
 ```javascript
@@ -254,7 +290,38 @@ ws.send(JSON.stringify(message));
    e) Muestra mensaje si firma es válida
 ```
 
-## 🛡️ Medidas de Protección
+## 🔄 Rotación de Claves
+
+### Configuración Automática
+
+```powershell
+# Configurar tarea programada (ejecutar con permisos de administrador)
+cd backend
+.\setup_rotation_task.ps1
+```
+
+La tarea ejecutará automáticamente la rotación diaria a las 2:00 AM.
+
+### Rotación Manual
+
+```powershell
+# Verificar claves vencidas sin rotar
+python rotate_keys_auto.py --check-only
+
+# Ejecutar rotación automática
+python rotate_keys_auto.py
+```
+
+### Prueba del Sistema
+
+```powershell
+# Ejecutar prueba completa de rotación
+python test_rotation.py
+```
+
+**📖 Documentación completa:** Ver [KEY_ROTATION_GUIDE.md](KEY_ROTATION_GUIDE.md)
+
+## ️ Medidas de Protección
 
 ### Contra Ataques de Fuerza Bruta
 - Rate limiting en endpoints de autenticación

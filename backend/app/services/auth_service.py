@@ -6,11 +6,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from fastapi import HTTPException, status
 from datetime import datetime, timedelta
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, List
 import secrets
 import pyotp
-from app.models.models import User, Session, AuditLog
-from app.schemas.schemas import UserCreate, UserLogin, Token, TOTPSetupResponse
+from app.models.models import User, Session, AuditLog, KeyRotationHistory
+from app.schemas.schemas import UserCreate, UserLogin, Token, TOTPSetupResponse, KeyRotationResponse
 from app.core.security import (
     verify_password,
     get_password_hash,
@@ -390,3 +390,156 @@ class AuthService:
             )
             self.db.add(audit_log)
             await self.db.commit()
+    
+    # ===================== ROTACIÓN DE CLAVES =====================
+    
+    async def rotate_user_keys(
+        self,
+        user_id: int,
+        reason: str = "Rotación manual",
+        ip_address: Optional[str] = None
+    ) -> KeyRotationResponse:
+        """
+        Rota las claves RSA de un usuario.
+        
+        Políticas de Seguridad:
+        - Genera nuevo par de claves RSA
+        - Registra la rotación en el historial
+        - Audita la operación
+        - Actualiza la fecha de rotación
+        
+        Args:
+            user_id: ID del usuario
+            reason: Razón de la rotación
+            ip_address: IP del cliente (opcional)
+        
+        Returns:
+            Información de la rotación con las nuevas claves
+        """
+        # Buscar usuario
+        result = await self.db.execute(
+            select(User).where(User.id == user_id)
+        )
+        user = result.scalar_one_or_none()
+        
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Usuario no encontrado"
+            )
+        
+        # Guardar claves antiguas para el historial
+        old_public_key = user.public_key_rsa
+        
+        # Generar nuevo par de claves RSA
+        private_key_pem, public_key_pem = crypto_manager.generate_rsa_key_pair()
+        
+        # Actualizar claves del usuario
+        user.public_key_rsa = public_key_pem.decode('utf-8')
+        user.key_rotation_date = datetime.utcnow()
+        
+        # Registrar en historial de rotación
+        rotation_history = KeyRotationHistory(
+            user_id=user.id,
+            old_public_key=old_public_key,
+            new_public_key=user.public_key_rsa,
+            rotation_reason=reason,
+            rotated_at=datetime.utcnow()
+        )
+        self.db.add(rotation_history)
+        
+        # Auditar la rotación
+        await self._create_audit_log(
+            user_id=user.id,
+            action=f"Rotación de claves RSA: {reason}",
+            action_type="KEY_ROTATION",
+            ip_address=ip_address,
+            success=True,
+            details=f"Razón: {reason}"
+        )
+        
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return KeyRotationResponse(
+            user_id=user.id,
+            public_key_rsa=user.public_key_rsa,
+            private_key_rsa=private_key_pem.decode('utf-8'),
+            rotated_at=user.key_rotation_date,
+            reason=reason
+        )
+    
+    async def check_and_rotate_expired_keys(self) -> List[Dict]:
+        """
+        Verifica y rota claves vencidas según la política de rotación.
+        
+        Política: Rotar claves cada KEY_ROTATION_DAYS días (por defecto 90).
+        
+        Returns:
+            Lista de usuarios cuyas claves fueron rotadas
+        """
+        rotation_threshold = datetime.utcnow() - timedelta(days=settings.KEY_ROTATION_DAYS)
+        
+        # Buscar usuarios con claves vencidas
+        result = await self.db.execute(
+            select(User).where(
+                User.key_rotation_date < rotation_threshold,
+                User.is_active == True
+            )
+        )
+        users_to_rotate = result.scalars().all()
+        
+        rotated_users = []
+        
+        for user in users_to_rotate:
+            try:
+                # Rotar claves automáticamente
+                rotation_result = await self.rotate_user_keys(
+                    user_id=user.id,
+                    reason=f"Rotación automática (claves vencidas desde {user.key_rotation_date.date()})",
+                    ip_address="Sistema"
+                )
+                
+                rotated_users.append({
+                    "user_id": user.id,
+                    "username": user.username,
+                    "old_rotation_date": user.key_rotation_date,
+                    "new_rotation_date": rotation_result.rotated_at,
+                    "reason": rotation_result.reason
+                })
+                
+            except Exception as e:
+                # Registrar error pero continuar con otros usuarios
+                await self._create_audit_log(
+                    user_id=user.id,
+                    action=f"Error en rotación automática: {str(e)}",
+                    action_type="KEY_ROTATION_ERROR",
+                    success=False,
+                    details=str(e)
+                )
+        
+        return rotated_users
+    
+    async def get_rotation_history(
+        self,
+        user_id: int,
+        limit: int = 10
+    ) -> List[KeyRotationHistory]:
+        """
+        Obtiene el historial de rotaciones de claves de un usuario.
+        
+        Args:
+            user_id: ID del usuario
+            limit: Número máximo de registros a devolver
+        
+        Returns:
+            Lista de rotaciones ordenadas por fecha (más reciente primero)
+        """
+        result = await self.db.execute(
+            select(KeyRotationHistory)
+            .where(KeyRotationHistory.user_id == user_id)
+            .order_by(KeyRotationHistory.rotated_at.desc())
+            .limit(limit)
+        )
+        return result.scalars().all()
+

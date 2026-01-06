@@ -205,12 +205,13 @@ class ReadReceipt(BaseModel):
 class KeyRotationRequest(BaseModel):
     """Schema para solicitar rotación de claves"""
     password: str
-    reason: Optional[str] = "Manual rotation"
+    reason: Optional[str] = "Rotación manual"
 
 
 class KeyRotationResponse(BaseModel):
     """Schema de respuesta de rotación"""
-    success: bool
-    new_public_key: str
+    user_id: int
+    public_key_rsa: str
+    private_key_rsa: str
     rotated_at: datetime
-    message: str
+    reason: str
