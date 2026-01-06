@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Seguro - Sistema de Mensajería Cifrada</title>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+</head>
+<body>
+    <!-- Pantalla de Login/Registro -->
+    <div id="auth-screen" class="screen active">
+        <div class="auth-container">
+            <div class="logo">
+                <i class="fas fa-shield-alt"></i>
+                <h1>Chat Seguro</h1>
+                <p>Sistema de Mensajería con Cifrado End-to-End</p>
+            </div>
+
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab active" onclick="switchTab('login')">Iniciar Sesión</button>
+                <button class="tab" onclick="switchTab('register')">Registrarse</button>
+            </div>
+
+            <!-- Formulario de Login -->
+            <div id="login-form" class="auth-form active">
+                <h2>Iniciar Sesión</h2>
+                <form onsubmit="handleLogin(event)">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Usuario</label>
+                        <input type="text" id="login-username" required placeholder="Ingresa tu usuario">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Contraseña</label>
+                        <input type="password" id="login-password" required placeholder="Ingresa tu contraseña">
+                    </div>
+                    <div class="form-group" id="totp-group" style="display: none;">
+                        <label><i class="fas fa-key"></i> Código 2FA</label>
+                        <input type="text" id="login-totp" placeholder="123456">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                    </button>
+                </form>
+            </div>
+
+            <!-- Formulario de Registro -->
+            <div id="register-form" class="auth-form">
+                <h2>Crear Cuenta</h2>
+                <form onsubmit="handleRegister(event)">
+                    <div class="form-group">
+                        <label><i class="fas fa-user"></i> Usuario</label>
+                        <input type="text" id="register-username" required placeholder="Elige un nombre de usuario">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-envelope"></i> Email</label>
+                        <input type="email" id="register-email" required placeholder="tu@email.com">
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Contraseña</label>
+                        <input type="password" id="register-password" required placeholder="Mínimo 12 caracteres">
+                        <small>Debe contener mayúsculas, minúsculas, números y símbolos</small>
+                    </div>
+                    <div class="form-group">
+                        <label><i class="fas fa-lock"></i> Confirmar Contraseña</label>
+                        <input type="password" id="register-confirm" required placeholder="Repite tu contraseña">
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="fas fa-user-plus"></i> Registrarse
+                    </button>
+                </form>
+            </div>
+
+            <div class="security-info">
+                <i class="fas fa-shield-virus"></i>
+                <p>Cifrado RSA-2048 + AES-256 | Autenticación JWT | 2FA Opcional</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pantalla de Chat -->
+    <div id="chat-screen" class="screen">
+        <div class="chat-container">
+            <!-- Sidebar -->
+            <div class="sidebar">
+                <div class="sidebar-header">
+                    <div class="user-info">
+                        <div class="user-avatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div class="user-details">
+                            <h3 id="current-username">Usuario</h3>
+                            <span class="status online">En línea</span>
+                        </div>
+                    </div>
+                    <button class="btn-icon" onclick="showSettings()" title="Configuración">
+                        <i class="fas fa-cog"></i>
+                    </button>
+                    <button class="btn-icon" onclick="logout()" title="Cerrar sesión">
+                        <i class="fas fa-sign-out-alt"></i>
+                    </button>
+                </div>
+
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" placeholder="Buscar usuarios..." id="search-users" onkeyup="filterUsers()">
+                </div>
+
+                <div class="users-list" id="users-list">
+                    <!-- Usuarios se cargarán aquí dinámicamente -->
+                </div>
+            </div>
+
+            <!-- Área de Chat -->
+            <div class="chat-area">
+                <div class="chat-header">
+                    <div class="chat-user-info">
+                        <div class="user-avatar">
+                            <i class="fas fa-user-circle"></i>
+                        </div>
+                        <div>
+                            <h3 id="chat-username">Selecciona un usuario</h3>
+                            <span class="typing-indicator" id="typing-indicator" style="display: none;">
+                                <i class="fas fa-circle-notch fa-spin"></i> Escribiendo...
+                            </span>
+                        </div>
+                    </div>
+                    <div class="chat-actions">
+                        <button class="btn-icon" onclick="showEncryptionInfo()" title="Información de cifrado">
+                            <i class="fas fa-lock"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="messages-container" id="messages-container">
+                    <div class="no-chat-selected">
+                        <i class="fas fa-comments"></i>
+                        <h3>Bienvenido al Chat Seguro</h3>
+                        <p>Selecciona un usuario para comenzar a chatear de forma segura</p>
+                        <div class="security-features">
+                            <div class="feature">
+                                <i class="fas fa-shield-alt"></i>
+                                <span>Cifrado End-to-End</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-signature"></i>
+                                <span>Firmas Digitales</span>
+                            </div>
+                            <div class="feature">
+                                <i class="fas fa-user-shield"></i>
+                                <span>Autenticación 2FA</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Contenedor de mensajes del chat -->
+                    <div class="messages" id="messages" style="display: none;">
+                        <!-- Los mensajes se cargarán aquí dinámicamente -->
+                    </div>
+                </div>
+
+                <div class="message-input-container" id="message-input-container" style="display: none;">
+                    <form onsubmit="sendMessage(event)" class="message-form">
+                        <button type="button" class="btn-icon" title="Adjuntar archivo">
+                            <i class="fas fa-paperclip"></i>
+                        </button>
+                        <input 
+                            type="text" 
+                            id="message-input" 
+                            placeholder="Escribe un mensaje cifrado..." 
+                            autocomplete="off"
+                            onkeyup="handleTyping()"
+                        >
+                        <button type="submit" class="btn-send">
+                            <i class="fas fa-paper-plane"></i>
+                        </button>
+                    </form>
+                    <div class="encryption-status">
+                        <i class="fas fa-lock"></i>
+                        <span>Cifrado AES-256 + RSA-2048</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Configuración 2FA -->
+    <div id="settings-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-cog"></i> Configuración</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="setting-item">
+                    <h3><i class="fas fa-shield-alt"></i> Autenticación de Dos Factores (2FA)</h3>
+                    <p id="2fa-status">Estado: Deshabilitado</p>
+                    <button id="enable-2fa-btn" class="btn btn-primary">
+                        <i class="fas fa-key"></i> Configurar 2FA
+                    </button>
+                </div>
+                <div class="setting-item">
+                    <h3><i class="fas fa-sync-alt"></i> Rotación de Claves</h3>
+                    <p>Genera un nuevo par de claves RSA</p>
+                    <button id="rotate-keys-btn" class="btn btn-secondary">
+                        <i class="fas fa-redo"></i> Rotar Claves
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal de Información de Cifrado -->
+    <div id="encryption-modal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2><i class="fas fa-shield-alt"></i> Información de Cifrado</h2>
+                <button class="modal-close">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div id="encryption-status" class="encryption-details">
+                    <h3>🔐 Sistema de Cifrado Híbrido</h3>
+                    <ul>
+                        <li><strong>RSA-2048:</strong> Cifrado asimétrico para intercambio de claves</li>
+                        <li><strong>AES-256-CBC:</strong> Cifrado simétrico para mensajes</li>
+                        <li><strong>RSA-PSS:</strong> Firmas digitales para autenticidad</li>
+                        <li><strong>SHA-256:</strong> Función hash para firmas</li>
+                    </ul>
+                    <h3>🛡️ Características de Seguridad</h3>
+                    <ul>
+                        <li>✅ Cifrado End-to-End (E2EE)</li>
+                        <li>✅ Forward Secrecy</li>
+                        <li>✅ Verificación de integridad</li>
+                        <li>✅ No repudio con firmas digitales</li>
+                        <li>✅ Protección contra replay attacks</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notificaciones Toast -->
+    <div id="toast-container"></div>
+
+    <!-- Panel de Depuración -->
+    <div id="debug-panel" style="
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        max-height: 200px;
+        background: #1a1a2e;
+        color: #0f0;
+        font-family: monospace;
+        font-size: 11px;
+        overflow-y: auto;
+        padding: 10px;
+        z-index: 10000;
+        border-top: 2px solid #0f0;
+        display: block;
+    ">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+            <strong>🔧 Panel de Depuración</strong>
+            <button onclick="document.getElementById('debug-panel').style.display='none'" style="background: #f00; color: #fff; border: none; padding: 2px 8px; cursor: pointer;">X</button>
+        </div>
+        <div id="debug-log"></div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="js/config.js?v=6"></script>
+    <script src="js/crypto.js?v=6"></script>
+    <script src="js/api.js?v=6"></script>
+    <script src="js/websocket.js?v=6"></script>
+    <script src="js/app.js?v=6"></script>
+</body>
+</html>

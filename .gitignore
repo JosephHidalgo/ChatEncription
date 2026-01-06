@@ -1,0 +1,41 @@
+# Entorno Virtual
+venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Variables de entorno
+.env
+.env.local
+
+# Base de Datos
+*.db
+*.sqlite3
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Claves privadas (¡NUNCA commitear!)
+*.pem
+*.key
+private_keys/
+
+# Sistema
+.DS_Store
+Thumbs.db
+
+TESTING_GUIDE.md
+verify_db.py
