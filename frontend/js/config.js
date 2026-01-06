@@ -26,6 +26,7 @@ const CONFIG = {
         ACCESS_TOKEN: 'access_token',
         REFRESH_TOKEN: 'refresh_token',
         USER_DATA: 'user_data',
+        USER_ID: 'user_id',
         PRIVATE_KEY: 'private_key',
         PUBLIC_KEY: 'public_key'
     }

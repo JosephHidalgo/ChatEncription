@@ -1,9 +1,15 @@
 // Módulo de criptografía para el cliente
 // Soporta tanto Web Crypto API (HTTPS) como fallback para HTTP
+// v9 - Clave basada en IDs de usuario
 
 const CryptoModule = {
     // Detectar si Web Crypto API está disponible
     isSecureContext: !!(window.crypto && window.crypto.subtle),
+    
+    // CONFIGURACIÓN DE CIFRADO:
+    // - true:  Usa XOR (compatible HTTP + HTTPS, menos seguro)
+    // - false: Usa AES-256-CBC (requiere HTTPS o localhost en AMBOS dispositivos)
+    forceXorForCompatibility: false,  // Cambiado a false para usar AES
     
     /**
      * Genera un par de claves RSA (simulado - el servidor las genera)
@@ -56,8 +62,42 @@ const CryptoModule = {
     },
 
     /**
-     * Genera una clave AES determinista basada en el token JWT
-     * Esto permite que ambos dispositivos usen la misma clave (TEMPORAL)
+     * Genera una clave AES determinista basada en los IDs de usuario de la conversación
+     * Esto garantiza que ambos dispositivos generen la misma clave
+     * @param {number} userId1 - ID del primer usuario
+     * @param {number} userId2 - ID del segundo usuario
+     */
+    async generateConversationKey(userId1, userId2) {
+        try {
+            // Ordenar los IDs para que siempre generen la misma clave sin importar quién envía
+            const sortedIds = [userId1, userId2].sort((a, b) => a - b);
+            const seed = `chat_seguro_${sortedIds[0]}_${sortedIds[1]}_v1`;
+            
+            DEBUG.crypto('Generando clave de conversación para usuarios: ' + sortedIds.join(' <-> '));
+            DEBUG.crypto('Seed: ' + seed);
+            
+            const encoder = new TextEncoder();
+            const seedData = encoder.encode(seed);
+            
+            let hashBuffer;
+            if (this.isSecureContext) {
+                hashBuffer = await crypto.subtle.digest('SHA-256', seedData);
+            } else {
+                hashBuffer = await this.sha256Fallback(seedData);
+            }
+            
+            const key = this.arrayBufferToBase64(hashBuffer);
+            DEBUG.crypto('Clave generada (primeros 20 chars): ' + key.substring(0, 20));
+            return key;
+        } catch (error) {
+            DEBUG.error('Error generando clave de conversación: ' + error.message);
+            throw error;
+        }
+    },
+
+    /**
+     * [DEPRECATED] Genera una clave AES basada en el token JWT
+     * NOTA: No usar - cada dispositivo tiene token diferente
      */
     async generateSessionKey() {
         try {
@@ -102,14 +142,19 @@ const CryptoModule = {
     /**
      * Cifra un mensaje con AES-256-CBC
      * Con fallback XOR para HTTP (solo desarrollo)
+     * NOTA: Si forceXorForCompatibility=true, SIEMPRE usa XOR
      */
     async encryptAES(message, key, iv) {
         try {
             const encoder = new TextEncoder();
             const data = encoder.encode(message);
             
-            if (this.isSecureContext) {
+            // Determinar si usar AES o XOR
+            const useAes = this.isSecureContext && !this.forceXorForCompatibility;
+            
+            if (useAes) {
                 // Usar Web Crypto API (HTTPS/localhost)
+                DEBUG.crypto('Usando cifrado AES-256-CBC');
                 const keyData = this.base64ToArrayBuffer(key);
                 const cryptoKey = await crypto.subtle.importKey(
                     'raw',
@@ -128,8 +173,8 @@ const CryptoModule = {
                 
                 return this.arrayBufferToBase64(encrypted);
             } else {
-                // Fallback: XOR simple para desarrollo HTTP
-                DEBUG.warn('Usando cifrado XOR fallback (HTTP)');
+                // Fallback: XOR simple para desarrollo HTTP o compatibilidad
+                DEBUG.warn('Usando cifrado XOR (fallback/compatibilidad)');
                 const keyData = this.base64ToArrayBuffer(key);
                 const keyArray = new Uint8Array(keyData);
                 const encrypted = new Uint8Array(data.length);
@@ -196,6 +241,35 @@ const CryptoModule = {
     },
 
     /**
+     * Descifra un mensaje con XOR (función separada para uso directo)
+     * @param {string} encryptedData - Datos cifrados en Base64
+     * @param {string} key - Clave en Base64
+     * @returns {string} - Texto descifrado
+     */
+    xorDecrypt(encryptedData, key) {
+        try {
+            DEBUG.crypto('XOR decrypt iniciado');
+            const keyData = this.base64ToArrayBuffer(key);
+            const keyArray = new Uint8Array(keyData);
+            const encryptedBuffer = this.base64ToArrayBuffer(encryptedData);
+            const encryptedArray = new Uint8Array(encryptedBuffer);
+            const decrypted = new Uint8Array(encryptedArray.length);
+            
+            for (let i = 0; i < encryptedArray.length; i++) {
+                decrypted[i] = encryptedArray[i] ^ keyArray[i % keyArray.length];
+            }
+            
+            const decoder = new TextDecoder();
+            const result = decoder.decode(decrypted);
+            DEBUG.crypto('XOR decrypt resultado: ' + result);
+            return result;
+        } catch (error) {
+            DEBUG.error('Error en xorDecrypt: ' + error.message);
+            throw error;
+        }
+    },
+
+    /**
      * Simula el cifrado RSA
      * NOTA: En producción real, se debe usar forge.js o similar
      */
@@ -217,21 +291,30 @@ const CryptoModule = {
 
     /**
      * Crea un sobre de mensaje cifrado (híbrido RSA + AES)
-     * NOTA: Versión simplificada - usa clave de sesión compartida
+     * @param {string} message - Mensaje a cifrar
+     * @param {string} recipientPublicKey - Clave pública del destinatario (no usada en versión simplificada)
+     * @param {number} senderId - ID del usuario que envía
+     * @param {number} recipientId - ID del usuario que recibe
      */
-    async createSecureEnvelope(message, recipientPublicKey) {
+    async createSecureEnvelope(message, recipientPublicKey, senderId, recipientId) {
         try {
             DEBUG.crypto('Creando sobre para: ' + message.substring(0, 30) + '...');
+            DEBUG.crypto('Sender ID: ' + senderId + ', Recipient ID: ' + recipientId);
+            DEBUG.crypto('Contexto seguro: ' + this.isSecureContext);
+            DEBUG.crypto('Forzar XOR para compatibilidad: ' + this.forceXorForCompatibility);
             
-            // Usar clave de sesión compartida (derivada del token)
-            DEBUG.crypto('Generando clave de sesión...');
-            const aesKey = await this.generateSessionKey();
+            // Generar clave basada en los IDs de usuario (misma para ambos)
+            DEBUG.crypto('Generando clave de conversación...');
+            const aesKey = await this.generateConversationKey(senderId, recipientId);
             const iv = this.generateIV();
             
-            DEBUG.crypto('Clave de sesión generada (primeros 20 chars): ' + aesKey.substring(0, 20));
+            // Determinar método de cifrado:
+            // - Si forceXorForCompatibility = true, SIEMPRE usar XOR
+            // - Si no, usar AES solo si hay contexto seguro
+            const useAes = this.isSecureContext && !this.forceXorForCompatibility;
+            const cryptoMethod = useAes ? 'aes' : 'xor';
+            DEBUG.crypto('Método de cifrado: ' + cryptoMethod);
             
-            // Cifrar el mensaje con AES
-            DEBUG.crypto('Cifrando con AES-256-CBC...');
             const encryptedMessage = await this.encryptAES(message, aesKey, iv);
             DEBUG.crypto('Mensaje cifrado: ' + encryptedMessage.substring(0, 30) + '...');
             
@@ -239,15 +322,18 @@ const CryptoModule = {
             const signature = await this.sign(message);
             DEBUG.crypto('Firma SHA-256 creada');
             
-            // Crear sobre completo (NO enviamos la clave porque es derivada del token)
+            // Crear sobre completo con indicador del método usado
             const envelope = {
                 encrypted_message: encryptedMessage,
                 iv: iv,
                 signature: signature,
-                timestamp: new Date().toISOString()
+                timestamp: new Date().toISOString(),
+                crypto_method: cryptoMethod,  // Indicar qué método se usó
+                sender_id: senderId,          // Incluir IDs para descifrado
+                recipient_id: recipientId
             };
             
-            DEBUG.success('Sobre cifrado creado correctamente');
+            DEBUG.success('Sobre cifrado creado correctamente (método: ' + cryptoMethod + ')');
             return envelope;
         } catch (error) {
             DEBUG.error('Error creando sobre: ' + error.message);
@@ -257,17 +343,29 @@ const CryptoModule = {
 
     /**
      * Abre un sobre de mensaje cifrado
-     * NOTA: Versión simplificada - usa clave de sesión compartida
+     * @param {object} envelope - Sobre cifrado con encrypted_message, iv, sender_id, recipient_id
+     * @param {string} privateKey - Clave privada (no usada en versión simplificada)
+     * @param {string} senderPublicKey - Clave pública del emisor (no usada)
+     * @param {number} myUserId - ID del usuario actual (receptor)
      */
-    async openSecureEnvelope(envelope, privateKey, senderPublicKey) {
+    async openSecureEnvelope(envelope, privateKey, senderPublicKey, myUserId) {
         try {
             DEBUG.crypto('Abriendo sobre cifrado...');
             DEBUG.crypto('Sobre recibido', envelope);
             
-            // Usar la misma clave de sesión (derivada del token)
-            DEBUG.crypto('Generando clave de sesión para descifrar...');
-            const aesKey = await this.generateSessionKey();
-            DEBUG.crypto('Clave de sesión (primeros 20 chars): ' + aesKey.substring(0, 20));
+            // Detectar qué método se usó para cifrar
+            const cryptoMethod = envelope.crypto_method || 'aes';
+            DEBUG.crypto('Método de cifrado detectado: ' + cryptoMethod);
+            
+            // Obtener IDs de usuario del sobre o usar los parámetros
+            const senderId = envelope.sender_id;
+            const recipientId = envelope.recipient_id || myUserId;
+            
+            DEBUG.crypto('Sender ID: ' + senderId + ', Recipient ID: ' + recipientId);
+            
+            // Generar la misma clave de conversación
+            DEBUG.crypto('Generando clave de conversación para descifrar...');
+            const aesKey = await this.generateConversationKey(senderId, recipientId);
             
             // Validar que tenemos todos los datos necesarios
             if (!envelope.encrypted_message || !envelope.iv) {
@@ -275,16 +373,37 @@ const CryptoModule = {
                 throw new Error('Sobre incompleto: faltan datos de cifrado');
             }
             
-            DEBUG.crypto('Descifrando con AES-256-CBC...');
+            DEBUG.crypto('Descifrando mensaje...');
             DEBUG.crypto('encrypted_message: ' + envelope.encrypted_message);
             DEBUG.crypto('iv: ' + envelope.iv);
             
-            // Descifrar el mensaje con AES
-            const message = await this.decryptAES(
-                envelope.encrypted_message,
-                aesKey,
-                envelope.iv
-            );
+            let message;
+            
+            // Usar el método correcto para descifrar
+            if (cryptoMethod === 'xor') {
+                // Mensaje cifrado con XOR - usar XOR para descifrar
+                DEBUG.crypto('Usando descifrado XOR (fallback)');
+                message = this.xorDecrypt(envelope.encrypted_message, aesKey);
+            } else {
+                // Mensaje cifrado con AES - intentar AES primero
+                if (this.isSecureContext && window.crypto && window.crypto.subtle) {
+                    DEBUG.crypto('Usando descifrado AES-256-CBC');
+                    message = await this.decryptAES(
+                        envelope.encrypted_message,
+                        aesKey,
+                        envelope.iv
+                    );
+                } else {
+                    // No tenemos Web Crypto pero el mensaje fue cifrado con AES
+                    DEBUG.warn('ADVERTENCIA: Mensaje cifrado con AES pero no hay Web Crypto disponible');
+                    try {
+                        message = atob(envelope.encrypted_message);
+                        message = '[AES-No disponible] ' + message.substring(0, 50) + '...';
+                    } catch (e) {
+                        message = '[No se puede descifrar: AES no disponible en HTTP]';
+                    }
+                }
+            }
             
             DEBUG.success('Mensaje descifrado: ' + message);
             

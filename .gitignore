@@ -38,4 +38,7 @@ private_keys/
 Thumbs.db
 
 TESTING_GUIDE.md
+NETWORK_SETUP.md
 verify_db.py
+demo_crypto.py
+view_audit.py

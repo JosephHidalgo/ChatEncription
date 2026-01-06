@@ -189,6 +189,10 @@ async function handleLogin(e) {
         // Cargar usuario
         currentUser = await API.getCurrentUser();
         
+        // Guardar ID de usuario para cifrado
+        localStorage.setItem(CONFIG.STORAGE_KEYS.USER_ID, currentUser.id.toString());
+        DEBUG.info('Usuario ID guardado: ' + currentUser.id);
+        
         showToast('success', 'Login exitoso', `Bienvenido ${currentUser.username}`);
         showChatScreen();
         
@@ -330,6 +334,7 @@ async function selectUser(user) {
  */
 async function loadMessageHistory(recipientId) {
     try {
+        DEBUG.info('Cargando historial de mensajes con usuario: ' + recipientId);
         const messages = await API.getMessageHistory(recipientId);
         const container = document.getElementById('messages');
         
@@ -340,17 +345,74 @@ async function loadMessageHistory(recipientId) {
         
         container.innerHTML = '';
         
-        // Por ahora no descifrar mensajes del historial
-        // Solo mostrar placeholder
-        if (messages.length === 0) {
-            container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No hay mensajes previos</div>';
+        if (!messages || messages.length === 0) {
+            container.innerHTML = '<div style="text-align: center; padding: 20px; color: #999;">No hay mensajes previos. ¡Inicia la conversación!</div>';
+            return;
+        }
+        
+        DEBUG.info('Mensajes encontrados: ' + messages.length);
+        
+        // Obtener mi ID
+        let myUserId = parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID));
+        if (isNaN(myUserId) && currentUser) {
+            myUserId = currentUser.id;
+        }
+        
+        // Descifrar y mostrar cada mensaje
+        for (const msg of messages) {
+            try {
+                // Verificar si hay datos cifrados
+                if (msg.encrypted_data) {
+                    DEBUG.crypto('Descifrando mensaje del historial...');
+                    
+                    // Asegurar que el envelope tenga los IDs
+                    const envelope = msg.encrypted_data;
+                    envelope.sender_id = msg.sender_id;
+                    envelope.recipient_id = msg.recipient_id;
+                    
+                    const decrypted = await CryptoModule.openSecureEnvelope(
+                        envelope,
+                        null,  // privateKey no se usa
+                        null,  // senderPublicKey no se usa
+                        myUserId
+                    );
+                    
+                    displayMessage({
+                        content: decrypted.message,
+                        sender_id: msg.sender_id,
+                        timestamp: msg.timestamp,
+                        signatureValid: decrypted.signatureValid
+                    });
+                } else {
+                    // Mensaje sin cifrar (fallback)
+                    displayMessage({
+                        content: msg.content || '[Mensaje no disponible]',
+                        sender_id: msg.sender_id,
+                        timestamp: msg.timestamp
+                    });
+                }
+            } catch (decryptError) {
+                DEBUG.error('Error descifrando mensaje del historial: ' + decryptError.message);
+                // Mostrar mensaje como no descifrable
+                displayMessage({
+                    content: '🔒 [Mensaje cifrado - no se puede descifrar]',
+                    sender_id: msg.sender_id,
+                    timestamp: msg.timestamp,
+                    isError: true
+                });
+            }
         }
         
         // Scroll al final
-        container.scrollTop = container.scrollHeight;
+        setTimeout(() => {
+            container.scrollTop = container.scrollHeight;
+        }, 100);
+        
+        DEBUG.success('Historial cargado correctamente');
         
     } catch (error) {
         console.error('Error cargando historial:', error);
+        DEBUG.error('Error cargando historial: ' + error.message);
     }
 }
 
@@ -406,7 +468,7 @@ async function sendMessage(event) {
 }
 
 /**
- * Mostrar mensaje en el chat
+ * Mostrar mensaje en el chat - Diseño estilo WhatsApp
  */
 async function displayMessage(messageData) {
     const container = document.getElementById('messages');
@@ -419,7 +481,7 @@ async function displayMessage(messageData) {
     const isSent = messageData.sender_id === currentUser.id;
     
     const messageDiv = document.createElement('div');
-    messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+    messageDiv.className = `message-wrapper ${isSent ? 'sent' : 'received'}`;
     
     const time = new Date(messageData.timestamp).toLocaleTimeString('es-PE', {
         hour: '2-digit',
@@ -429,24 +491,30 @@ async function displayMessage(messageData) {
     let verificationIcon = '';
     if (messageData.signatureValid !== undefined) {
         verificationIcon = messageData.signatureValid 
-            ? '<span class="verification-icon verified" title="Firma verificada">✓</span>'
-            : '<span class="verification-icon unverified" title="Firma no verificada">⚠</span>';
+            ? '<span class="verification-icon verified" title="Cifrado verificado">🔒✓</span>'
+            : '<span class="verification-icon unverified" title="Advertencia de seguridad">⚠️</span>';
     }
     
     messageDiv.innerHTML = `
-        <div class="message-content">
-            ${messageData.content}
-            ${verificationIcon}
+        <div class="message-bubble ${isSent ? 'sent' : 'received'}">
+            <div class="message-text">${messageData.content}</div>
+            <div class="message-footer">
+                <span class="message-time">${time}</span>
+                ${verificationIcon}
+                ${isSent ? '<span class="message-status">✓✓</span>' : ''}
+            </div>
         </div>
-        <div class="message-time">${time}</div>
     `;
     
     container.appendChild(messageDiv);
     
-    // Hacer scroll al final
+    // Hacer scroll suave al final
     setTimeout(() => {
-        container.scrollTop = container.scrollHeight;
-    }, 100);
+        container.scrollTo({
+            top: container.scrollHeight,
+            behavior: 'smooth'
+        });
+    }, 50);
 }
 
 /**

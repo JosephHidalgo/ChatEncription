@@ -120,6 +120,25 @@ class WebSocketManager {
             DEBUG.ws('Nuevo mensaje de usuario: ' + data.sender_id);
             DEBUG.crypto('Datos cifrados recibidos', data.encrypted_data);
             
+            // Obtener mi ID de usuario
+            let myUserId = parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID));
+            
+            // Si no hay USER_ID guardado, obtenerlo del usuario actual
+            if (isNaN(myUserId) && currentUser) {
+                myUserId = currentUser.id;
+                localStorage.setItem(CONFIG.STORAGE_KEYS.USER_ID, myUserId.toString());
+                DEBUG.info('USER_ID recuperado de currentUser: ' + myUserId);
+            }
+            
+            DEBUG.info('Mi user ID: ' + myUserId);
+            DEBUG.info('Sender ID (del mensaje WS): ' + data.sender_id);
+            
+            // IMPORTANTE: Ignorar mensajes propios (ya se mostraron al enviar)
+            if (data.sender_id === myUserId) {
+                DEBUG.info('Ignorando mensaje propio (ya mostrado al enviar)');
+                return;
+            }
+            
             // Descifrar el mensaje
             const privateKey = localStorage.getItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY);
             
@@ -127,17 +146,24 @@ class WebSocketManager {
             DEBUG.info('Obteniendo clave pública del emisor...');
             const senderKey = await API.getUserPublicKey(data.sender_id);
             
-            // Descifrar (versión simplificada con clave de sesión)
+            // Asegurar que el envelope tenga los IDs correctos
+            const envelope = data.encrypted_data;
+            envelope.sender_id = data.sender_id;  // Usar el sender_id del mensaje WS
+            envelope.recipient_id = myUserId;      // Yo soy el receptor
+            
+            // Descifrar (versión simplificada con clave de conversación)
             DEBUG.crypto('Descifrando mensaje...');
             const decrypted = await CryptoModule.openSecureEnvelope(
-                data.encrypted_data,
+                envelope,
                 privateKey,
-                senderKey.public_key_rsa
+                senderKey.public_key_rsa,
+                myUserId
             );
             
             DEBUG.success('Mensaje descifrado: ' + decrypted.message);
             
             // Emitir evento con mensaje descifrado
+            // El handler en app.js se encargará de mostrarlo
             this.emit('message', {
                 id: data.message_id,
                 sender_id: data.sender_id,
@@ -145,14 +171,6 @@ class WebSocketManager {
                 content: decrypted.message,
                 timestamp: data.timestamp,
                 signatureValid: decrypted.signatureValid
-            });
-            
-            // Mostrar en interfaz
-            displayMessage({
-                ...decrypted,
-                sender_id: data.sender_id,
-                sender_username: data.sender_username,
-                timestamp: data.timestamp
             });
             
         } catch (error) {
@@ -223,16 +241,22 @@ class WebSocketManager {
             DEBUG.info('Preparando envío a usuario: ' + recipientId);
             DEBUG.info('Mensaje: ' + message);
             
+            // Obtener mi ID de usuario
+            const myUserId = parseInt(localStorage.getItem(CONFIG.STORAGE_KEYS.USER_ID));
+            DEBUG.info('Mi user ID: ' + myUserId);
+            
             // Obtener clave pública del destinatario
             DEBUG.info('Obteniendo clave pública del destinatario...');
             const recipientKey = await API.getUserPublicKey(recipientId);
             DEBUG.success('Clave pública obtenida');
             
-            // Crear sobre cifrado
+            // Crear sobre cifrado con los IDs de usuario
             DEBUG.crypto('Creando sobre cifrado...');
             const envelope = await CryptoModule.createSecureEnvelope(
                 message,
-                recipientKey.public_key_rsa
+                recipientKey.public_key_rsa,
+                myUserId,      // Sender ID
+                recipientId    // Recipient ID
             );
             
             DEBUG.crypto('Sobre cifrado creado', envelope);
