@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Seguro - Sistema de Mensajería Cifrada</title>
+    <title>SecureChat - Mensajería Cifrada</title>
     <link rel="stylesheet" href="styles.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 </head>
@@ -13,14 +13,14 @@
         <div class="auth-container">
             <div class="logo">
                 <i class="fas fa-shield-alt"></i>
-                <h1>Chat Seguro</h1>
-                <p>Sistema de Mensajería con Cifrado End-to-End</p>
+                <h1>SecureChat</h1>
+                <p>Mensajería Cifrada de Extremo a Extremo</p>
             </div>
 
             <!-- Tabs -->
             <div class="tabs">
-                <button class="tab active" onclick="switchTab('login')">Iniciar Sesión</button>
-                <button class="tab" onclick="switchTab('register')">Registrarse</button>
+                <button class="tab active" data-tab="login" id="tab-login">Iniciar Sesión</button>
+                <button class="tab" data-tab="register" id="tab-register">Registrarse</button>
             </div>
 
             <!-- Formulario de Login -->
@@ -72,10 +72,6 @@
                 </form>
             </div>
 
-            <div class="security-info">
-                <i class="fas fa-shield-virus"></i>
-                <p>Cifrado RSA-2048 + AES-256 | Autenticación JWT | 2FA Opcional</p>
-            </div>
         </div>
     </div>
 
@@ -97,7 +93,7 @@
                     <button class="btn-icon" onclick="showSettings()" title="Configuración">
                         <i class="fas fa-cog"></i>
                     </button>
-                    <button class="btn-icon" onclick="logout()" title="Cerrar sesión">
+                    <button class="btn-icon" onclick="handleLogout()" title="Cerrar sesión">
                         <i class="fas fa-sign-out-alt"></i>
                     </button>
                 </div>
@@ -116,6 +112,9 @@
             <div class="chat-area">
                 <div class="chat-header">
                     <div class="chat-user-info">
+                        <button class="btn-icon btn-back-mobile" onclick="showSidebar()" title="Volver" style="display: none;">
+                            <i class="fas fa-arrow-left"></i>
+                        </button>
                         <div class="user-avatar">
                             <i class="fas fa-user-circle"></i>
                         </div>
@@ -136,8 +135,8 @@
                 <div class="messages-container" id="messages-container">
                     <div class="no-chat-selected">
                         <i class="fas fa-comments"></i>
-                        <h3>Bienvenido al Chat Seguro</h3>
-                        <p>Selecciona un usuario para comenzar a chatear de forma segura</p>
+                        <h3>Bienvenido a SecureChat</h3>
+                        <p>Selecciona un usuario para comenzar a conversar</p>
                         <div class="security-features">
                             <div class="feature">
                                 <i class="fas fa-shield-alt"></i>
@@ -178,7 +177,7 @@
                     </form>
                     <div class="encryption-status">
                         <i class="fas fa-lock"></i>
-                        <span>Cifrado AES-256 + RSA-2048</span>
+                        <span>Mensajes cifrados</span>
                     </div>
                 </div>
             </div>
@@ -242,30 +241,6 @@
 
     <!-- Notificaciones Toast -->
     <div id="toast-container"></div>
-
-    <!-- Panel de Depuración -->
-    <div id="debug-panel" style="
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        max-height: 200px;
-        background: #1a1a2e;
-        color: #0f0;
-        font-family: monospace;
-        font-size: 11px;
-        overflow-y: auto;
-        padding: 10px;
-        z-index: 10000;
-        border-top: 2px solid #0f0;
-        display: block;
-    ">
-        <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
-            <strong>🔧 Panel de Depuración</strong>
-            <button onclick="document.getElementById('debug-panel').style.display='none'" style="background: #f00; color: #fff; border: none; padding: 2px 8px; cursor: pointer;">X</button>
-        </div>
-        <div id="debug-log"></div>
-    </div>
 
     <!-- Scripts v14 - Fix alineación vertical de mensajes -->
     <script src="js/config.js?v=14"></script>

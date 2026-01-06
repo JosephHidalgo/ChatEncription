@@ -5,6 +5,37 @@ let typingTimeout = null;
 let wsManager = null;
 
 /**
+ * Generar color aleatorio para avatar
+ */
+function getRandomGradient(seed) {
+    // Colores base para degradados
+    const gradients = [
+        ['#667eea', '#764ba2'],
+        ['#f093fb', '#f5576c'],
+        ['#4facfe', '#00f2fe'],
+        ['#43e97b', '#38f9d7'],
+        ['#fa709a', '#fee140'],
+        ['#30cfd0', '#330867'],
+        ['#a8edea', '#fed6e3'],
+        ['#ff9a56', '#ff6a88'],
+        ['#fbc2eb', '#a6c1ee'],
+        ['#fdcbf1', '#e6dee9'],
+        ['#a1c4fd', '#c2e9fb'],
+        ['#ffecd2', '#fcb69f'],
+        ['#ff6e7f', '#bfe9ff'],
+        ['#e0c3fc', '#8ec5fc'],
+        ['#f77062', '#fe5196'],
+        ['#21d4fd', '#b721ff'],
+        ['#08aeea', '#2af598'],
+        ['#ff0844', '#ffb199'],
+    ];
+    
+    // Usar el ID del usuario como seed para que siempre tenga el mismo color
+    const index = seed % gradients.length;
+    return `linear-gradient(135deg, ${gradients[index][0]}, ${gradients[index][1]})`;
+}
+
+/**
  * Inicializar la aplicación
  */
 async function initApp() {
@@ -40,7 +71,35 @@ async function initApp() {
  * Configurar todos los event listeners
  */
 function setupEventListeners() {
-    // Tabs de autenticación
+    // Tabs de autenticación - Nuevos botones
+    const tabLogin = document.getElementById('tab-login');
+    const tabRegister = document.getElementById('tab-register');
+    
+    if (tabLogin) {
+        tabLogin.addEventListener('click', () => {
+            // Activar tab de login
+            tabLogin.classList.add('active');
+            tabRegister.classList.remove('active');
+            
+            // Mostrar formulario de login
+            document.getElementById('login-form').classList.add('active');
+            document.getElementById('register-form').classList.remove('active');
+        });
+    }
+    
+    if (tabRegister) {
+        tabRegister.addEventListener('click', () => {
+            // Activar tab de registro
+            tabRegister.classList.add('active');
+            tabLogin.classList.remove('active');
+            
+            // Mostrar formulario de registro
+            document.getElementById('register-form').classList.add('active');
+            document.getElementById('login-form').classList.remove('active');
+        });
+    }
+    
+    // Tabs de autenticación - Botones antiguos (por compatibilidad)
     const showLoginBtn = document.getElementById('show-login');
     const showRegisterBtn = document.getElementById('show-register');
     
@@ -122,6 +181,13 @@ async function showChatScreen() {
     
     // Actualizar información del usuario
     document.getElementById('current-username').textContent = currentUser.username;
+    
+    // Actualizar avatar del usuario actual con degradado
+    const userAvatar = document.querySelector('.sidebar-header .user-avatar');
+    if (userAvatar) {
+        userAvatar.style.background = getRandomGradient(currentUser.id);
+        userAvatar.innerHTML = currentUser.username[0].toUpperCase();
+    }
     
     // Cargar lista de usuarios
     await loadUsers();
@@ -267,7 +333,7 @@ async function loadUsers() {
             userItem.dataset.userId = user.id;
             
             userItem.innerHTML = `
-                <div class="user-avatar">${user.username[0].toUpperCase()}</div>
+                <div class="user-avatar" style="background: ${getRandomGradient(user.id)}">${user.username[0].toUpperCase()}</div>
                 <div class="user-info">
                     <div class="user-name">${user.username}</div>
                     <div class="user-status">
@@ -305,6 +371,24 @@ async function selectUser(user) {
     // Actualizar header del chat
     const chatUsername = document.getElementById('chat-username');
     if (chatUsername) chatUsername.textContent = user.username;
+    
+    // Actualizar avatar del chat header con degradado
+    const chatAvatar = document.querySelector('.chat-header .user-avatar');
+    if (chatAvatar) {
+        chatAvatar.style.background = getRandomGradient(user.id);
+        chatAvatar.innerHTML = user.username[0].toUpperCase();
+    }
+    
+    // Responsive: Ocultar sidebar en móviles cuando se selecciona un chat
+    const sidebar = document.querySelector('.sidebar');
+    const chatArea = document.querySelector('.chat-area');
+    const backBtn = document.querySelector('.btn-back-mobile');
+    
+    if (window.innerWidth <= 768) {
+        if (sidebar) sidebar.classList.add('hide-mobile');
+        if (chatArea) chatArea.classList.add('show-mobile');
+        if (backBtn) backBtn.style.display = 'flex';
+    }
     
     // Mostrar área de chat y ocultar placeholder
     const placeholder = document.querySelector('.no-chat-selected');
@@ -684,6 +768,21 @@ function showEncryptionInfo() {
  */
 function closeModal(modalId) {
     document.getElementById(modalId).classList.remove('active');
+}
+
+/**
+ * Mostrar sidebar (para móviles)
+ */
+function showSidebar() {
+    const sidebar = document.querySelector('.sidebar');
+    const chatArea = document.querySelector('.chat-area');
+    
+    if (sidebar) sidebar.classList.remove('hide-mobile');
+    if (chatArea) chatArea.classList.remove('show-mobile');
+    
+    // Ocultar el botón de volver
+    const backBtn = document.querySelector('.btn-back-mobile');
+    if (backBtn) backBtn.style.display = 'none';
 }
 
 /**
