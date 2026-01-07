@@ -1,469 +1,29 @@
-// Módulo de criptografía para el cliente
-// Soporta tanto Web Crypto API (HTTPS) como fallback para HTTP
-// v9 - Clave basada en IDs de usuario
+/**
+ * Módulo de Criptografía - Cifrado Híbrido RSA + AES
+ * 
+ * Implementa el estándar de cifrado híbrido:
+ * - AES-256-CBC para cifrar mensajes (eficiente para datos grandes)
+ * - RSA-OAEP para cifrar la clave AES (seguro para intercambio de claves)
+ * 
+ * Flujo:
+ * 1. Emisor genera clave AES aleatoria (32 bytes)
+ * 2. Emisor cifra mensaje con AES-256-CBC
+ * 3. Emisor cifra clave AES con clave pública RSA del destinatario
+ * 4. Se envía: {mensaje_cifrado, clave_AES_cifrada, IV, firma}
+ * 5. Receptor descifra clave AES con su clave privada RSA
+ * 6. Receptor descifra mensaje con la clave AES
+ * 
+ * @version 10.0 - Cifrado Híbrido Estándar
+ */
 
 const CryptoModule = {
-    // Detectar si Web Crypto API está disponible
+    // Detectar si Web Crypto API está disponible (requiere HTTPS o localhost)
     isSecureContext: !!(window.crypto && window.crypto.subtle),
-    
-    // CONFIGURACIÓN DE CIFRADO:
-    // - true:  Usa XOR (compatible HTTP + HTTPS, menos seguro)
-    // - false: Usa AES-256-CBC (requiere HTTPS o localhost en AMBOS dispositivos)
-    forceXorForCompatibility: false,  // Cambiado a false para usar AES
-    
-    /**
-     * Genera un par de claves RSA (simulado - el servidor las genera)
-     * En el cliente, solo se almacenan
-     */
-    async generateKeyPair() {
-        // En la implementación real, las claves RSA se generan en el servidor
-        // y la clave privada se descarga una sola vez
-        console.log('Generando par de claves RSA...');
-        return {
-            privateKey: null,
-            publicKey: null
-        };
-    },
+
+    // ==================== UTILIDADES DE CONVERSIÓN ====================
 
     /**
-     * Genera una clave AES-256 aleatoria
-     */
-    generateAESKey() {
-        // Generar 32 bytes aleatorios (256 bits)
-        const array = new Uint8Array(32);
-        crypto.getRandomValues(array);
-        return this.arrayBufferToBase64(array);
-    },
-
-    /**
-     * Implementación simple de SHA-256 para contextos no seguros (HTTP)
-     * NOTA: Usar solo para desarrollo, en producción usar HTTPS
-     */
-    async sha256Fallback(message) {
-        // Implementación simple de hash para desarrollo
-        // En producción, SIEMPRE usar HTTPS para tener crypto.subtle
-        let hash = 0;
-        const str = typeof message === 'string' ? message : new TextDecoder().decode(message);
-        
-        for (let i = 0; i < str.length; i++) {
-            const char = str.charCodeAt(i);
-            hash = ((hash << 5) - hash) + char;
-            hash = hash & hash;
-        }
-        
-        // Expandir a 32 bytes para simular SHA-256
-        const result = new Uint8Array(32);
-        const hashStr = Math.abs(hash).toString(16).padStart(8, '0');
-        for (let i = 0; i < 32; i++) {
-            result[i] = parseInt(hashStr.substring((i * 2) % hashStr.length, (i * 2) % hashStr.length + 2) || '00', 16) ^ (i * 7);
-        }
-        
-        return result.buffer;
-    },
-
-    /**
-     * Genera una clave AES determinista basada en los IDs de usuario de la conversación
-     * Esto garantiza que ambos dispositivos generen la misma clave
-     * @param {number} userId1 - ID del primer usuario
-     * @param {number} userId2 - ID del segundo usuario
-     */
-    async generateConversationKey(userId1, userId2) {
-        try {
-            // Ordenar los IDs para que siempre generen la misma clave sin importar quién envía
-            const sortedIds = [userId1, userId2].sort((a, b) => a - b);
-            const seed = `chat_seguro_${sortedIds[0]}_${sortedIds[1]}_v1`;
-            
-            DEBUG.crypto('Generando clave de conversación para usuarios: ' + sortedIds.join(' <-> '));
-            DEBUG.crypto('Seed: ' + seed);
-            
-            const encoder = new TextEncoder();
-            const seedData = encoder.encode(seed);
-            
-            let hashBuffer;
-            if (this.isSecureContext) {
-                hashBuffer = await crypto.subtle.digest('SHA-256', seedData);
-            } else {
-                hashBuffer = await this.sha256Fallback(seedData);
-            }
-            
-            const key = this.arrayBufferToBase64(hashBuffer);
-            DEBUG.crypto('Clave generada (primeros 20 chars): ' + key.substring(0, 20));
-            return key;
-        } catch (error) {
-            DEBUG.error('Error generando clave de conversación: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * [DEPRECATED] Genera una clave AES basada en el token JWT
-     * NOTA: No usar - cada dispositivo tiene token diferente
-     */
-    async generateSessionKey() {
-        try {
-            const token = localStorage.getItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN);
-            if (!token) {
-                throw new Error('No hay token de sesión');
-            }
-            
-            DEBUG.crypto('Contexto seguro (HTTPS): ' + this.isSecureContext);
-            
-            // Derivar clave de 256 bits del token
-            const encoder = new TextEncoder();
-            const tokenData = encoder.encode(token);
-            
-            let hashBuffer;
-            if (this.isSecureContext) {
-                // Usar Web Crypto API (HTTPS/localhost)
-                hashBuffer = await crypto.subtle.digest('SHA-256', tokenData);
-            } else {
-                // Fallback para HTTP (solo desarrollo)
-                DEBUG.warn('Usando fallback SHA-256 (HTTP no seguro)');
-                hashBuffer = await this.sha256Fallback(tokenData);
-            }
-            
-            return this.arrayBufferToBase64(hashBuffer);
-        } catch (error) {
-            DEBUG.error('Error generando clave de sesión: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * Genera un IV (Vector de Inicialización) aleatorio
-     */
-    generateIV() {
-        // Generar 16 bytes aleatorios (128 bits)
-        const array = new Uint8Array(16);
-        crypto.getRandomValues(array);
-        return this.arrayBufferToBase64(array);
-    },
-
-    /**
-     * Cifra un mensaje con AES-256-CBC
-     * Con fallback XOR para HTTP (solo desarrollo)
-     * NOTA: Si forceXorForCompatibility=true, SIEMPRE usa XOR
-     */
-    async encryptAES(message, key, iv) {
-        try {
-            const encoder = new TextEncoder();
-            const data = encoder.encode(message);
-            
-            // Determinar si usar AES o XOR
-            const useAes = this.isSecureContext && !this.forceXorForCompatibility;
-            
-            if (useAes) {
-                // Usar Web Crypto API (HTTPS/localhost)
-                DEBUG.crypto('Usando cifrado AES-256-CBC');
-                const keyData = this.base64ToArrayBuffer(key);
-                const cryptoKey = await crypto.subtle.importKey(
-                    'raw',
-                    keyData,
-                    { name: 'AES-CBC', length: 256 },
-                    false,
-                    ['encrypt']
-                );
-                
-                const ivData = this.base64ToArrayBuffer(iv);
-                const encrypted = await crypto.subtle.encrypt(
-                    { name: 'AES-CBC', iv: ivData },
-                    cryptoKey,
-                    data
-                );
-                
-                return this.arrayBufferToBase64(encrypted);
-            } else {
-                // Fallback: XOR simple para desarrollo HTTP o compatibilidad
-                DEBUG.warn('Usando cifrado XOR (fallback/compatibilidad)');
-                const keyData = this.base64ToArrayBuffer(key);
-                const keyArray = new Uint8Array(keyData);
-                const encrypted = new Uint8Array(data.length);
-                
-                for (let i = 0; i < data.length; i++) {
-                    encrypted[i] = data[i] ^ keyArray[i % keyArray.length];
-                }
-                
-                return this.arrayBufferToBase64(encrypted.buffer);
-            }
-        } catch (error) {
-            DEBUG.error('Error cifrando con AES: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * Descifra un mensaje con AES-256-CBC
-     * Con fallback XOR para HTTP (solo desarrollo)
-     */
-    async decryptAES(encryptedData, key, iv) {
-        try {
-            if (this.isSecureContext) {
-                // Usar Web Crypto API (HTTPS/localhost)
-                const keyData = this.base64ToArrayBuffer(key);
-                const cryptoKey = await crypto.subtle.importKey(
-                    'raw',
-                    keyData,
-                    { name: 'AES-CBC', length: 256 },
-                    false,
-                    ['decrypt']
-                );
-                
-                const ivData = this.base64ToArrayBuffer(iv);
-                const encryptedBuffer = this.base64ToArrayBuffer(encryptedData);
-                const decrypted = await crypto.subtle.decrypt(
-                    { name: 'AES-CBC', iv: ivData },
-                    cryptoKey,
-                    encryptedBuffer
-                );
-                
-                const decoder = new TextDecoder();
-                return decoder.decode(decrypted);
-            } else {
-                // Fallback: XOR simple para desarrollo HTTP
-                DEBUG.warn('Usando descifrado XOR fallback (HTTP)');
-                const keyData = this.base64ToArrayBuffer(key);
-                const keyArray = new Uint8Array(keyData);
-                const encryptedBuffer = this.base64ToArrayBuffer(encryptedData);
-                const encryptedArray = new Uint8Array(encryptedBuffer);
-                const decrypted = new Uint8Array(encryptedArray.length);
-                
-                for (let i = 0; i < encryptedArray.length; i++) {
-                    decrypted[i] = encryptedArray[i] ^ keyArray[i % keyArray.length];
-                }
-                
-                const decoder = new TextDecoder();
-                return decoder.decode(decrypted);
-            }
-        } catch (error) {
-            DEBUG.error('Error descifrando con AES: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * Descifra un mensaje con XOR (función separada para uso directo)
-     * @param {string} encryptedData - Datos cifrados en Base64
-     * @param {string} key - Clave en Base64
-     * @returns {string} - Texto descifrado
-     */
-    xorDecrypt(encryptedData, key) {
-        try {
-            DEBUG.crypto('XOR decrypt iniciado');
-            const keyData = this.base64ToArrayBuffer(key);
-            const keyArray = new Uint8Array(keyData);
-            const encryptedBuffer = this.base64ToArrayBuffer(encryptedData);
-            const encryptedArray = new Uint8Array(encryptedBuffer);
-            const decrypted = new Uint8Array(encryptedArray.length);
-            
-            for (let i = 0; i < encryptedArray.length; i++) {
-                decrypted[i] = encryptedArray[i] ^ keyArray[i % keyArray.length];
-            }
-            
-            const decoder = new TextDecoder();
-            const result = decoder.decode(decrypted);
-            DEBUG.crypto('XOR decrypt resultado: ' + result);
-            return result;
-        } catch (error) {
-            DEBUG.error('Error en xorDecrypt: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * Simula el cifrado RSA
-     * NOTA: En producción real, se debe usar forge.js o similar
-     */
-    async encryptRSA(data, publicKeyPEM) {
-        // En la implementación completa, usar forge.js o Web Crypto API
-        // Por ahora, retornamos un placeholder
-        console.log('Cifrando con RSA (clave pública)...');
-        return btoa(data); // Base64 simple como placeholder
-    },
-
-    /**
-     * Simula el descifrado RSA
-     */
-    async decryptRSA(encryptedData, privateKeyPEM) {
-        // En la implementación completa, usar forge.js o Web Crypto API
-        console.log('Descifrando con RSA (clave privada)...');
-        return atob(encryptedData); // Decodificar Base64 simple
-    },
-
-    /**
-     * Crea un sobre de mensaje cifrado (híbrido RSA + AES)
-     * @param {string} message - Mensaje a cifrar
-     * @param {string} recipientPublicKey - Clave pública del destinatario (no usada en versión simplificada)
-     * @param {number} senderId - ID del usuario que envía
-     * @param {number} recipientId - ID del usuario que recibe
-     */
-    async createSecureEnvelope(message, recipientPublicKey, senderId, recipientId) {
-        try {
-            DEBUG.crypto('Creando sobre para: ' + message.substring(0, 30) + '...');
-            DEBUG.crypto('Sender ID: ' + senderId + ', Recipient ID: ' + recipientId);
-            DEBUG.crypto('Contexto seguro: ' + this.isSecureContext);
-            DEBUG.crypto('Forzar XOR para compatibilidad: ' + this.forceXorForCompatibility);
-            
-            // Generar clave basada en los IDs de usuario (misma para ambos)
-            DEBUG.crypto('Generando clave de conversación...');
-            const aesKey = await this.generateConversationKey(senderId, recipientId);
-            const iv = this.generateIV();
-            
-            // Determinar método de cifrado:
-            // - Si forceXorForCompatibility = true, SIEMPRE usar XOR
-            // - Si no, usar AES solo si hay contexto seguro
-            const useAes = this.isSecureContext && !this.forceXorForCompatibility;
-            const cryptoMethod = useAes ? 'aes' : 'xor';
-            DEBUG.crypto('Método de cifrado: ' + cryptoMethod);
-            
-            const encryptedMessage = await this.encryptAES(message, aesKey, iv);
-            DEBUG.crypto('Mensaje cifrado: ' + encryptedMessage.substring(0, 30) + '...');
-            
-            // Firma simplificada (solo hash SHA-256)
-            const signature = await this.sign(message);
-            DEBUG.crypto('Firma SHA-256 creada');
-            
-            // Crear sobre completo con indicador del método usado
-            const envelope = {
-                encrypted_message: encryptedMessage,
-                iv: iv,
-                signature: signature,
-                timestamp: new Date().toISOString(),
-                crypto_method: cryptoMethod,  // Indicar qué método se usó
-                sender_id: senderId,          // Incluir IDs para descifrado
-                recipient_id: recipientId
-            };
-            
-            DEBUG.success('Sobre cifrado creado correctamente (método: ' + cryptoMethod + ')');
-            return envelope;
-        } catch (error) {
-            DEBUG.error('Error creando sobre: ' + error.message);
-            throw error;
-        }
-    },
-
-    /**
-     * Abre un sobre de mensaje cifrado
-     * @param {object} envelope - Sobre cifrado con encrypted_message, iv, sender_id, recipient_id
-     * @param {string} privateKey - Clave privada (no usada en versión simplificada)
-     * @param {string} senderPublicKey - Clave pública del emisor (no usada)
-     * @param {number} myUserId - ID del usuario actual (receptor)
-     */
-    async openSecureEnvelope(envelope, privateKey, senderPublicKey, myUserId) {
-        try {
-            DEBUG.crypto('Abriendo sobre cifrado...');
-            DEBUG.crypto('Sobre recibido', envelope);
-            
-            // Detectar qué método se usó para cifrar
-            const cryptoMethod = envelope.crypto_method || 'aes';
-            DEBUG.crypto('Método de cifrado detectado: ' + cryptoMethod);
-            
-            // Obtener IDs de usuario del sobre o usar los parámetros
-            const senderId = envelope.sender_id;
-            const recipientId = envelope.recipient_id || myUserId;
-            
-            DEBUG.crypto('Sender ID: ' + senderId + ', Recipient ID: ' + recipientId);
-            
-            // Generar la misma clave de conversación
-            DEBUG.crypto('Generando clave de conversación para descifrar...');
-            const aesKey = await this.generateConversationKey(senderId, recipientId);
-            
-            // Validar que tenemos todos los datos necesarios
-            if (!envelope.encrypted_message || !envelope.iv) {
-                DEBUG.error('Sobre incompleto - faltan campos');
-                throw new Error('Sobre incompleto: faltan datos de cifrado');
-            }
-            
-            DEBUG.crypto('Descifrando mensaje...');
-            DEBUG.crypto('encrypted_message: ' + envelope.encrypted_message);
-            DEBUG.crypto('iv: ' + envelope.iv);
-            
-            let message;
-            
-            // Usar el método correcto para descifrar
-            if (cryptoMethod === 'xor') {
-                // Mensaje cifrado con XOR - usar XOR para descifrar
-                DEBUG.crypto('Usando descifrado XOR (fallback)');
-                message = this.xorDecrypt(envelope.encrypted_message, aesKey);
-            } else {
-                // Mensaje cifrado con AES - intentar AES primero
-                if (this.isSecureContext && window.crypto && window.crypto.subtle) {
-                    DEBUG.crypto('Usando descifrado AES-256-CBC');
-                    message = await this.decryptAES(
-                        envelope.encrypted_message,
-                        aesKey,
-                        envelope.iv
-                    );
-                } else {
-                    // No tenemos Web Crypto pero el mensaje fue cifrado con AES
-                    DEBUG.warn('ADVERTENCIA: Mensaje cifrado con AES pero no hay Web Crypto disponible');
-                    try {
-                        message = atob(envelope.encrypted_message);
-                        message = '[AES-No disponible] ' + message.substring(0, 50) + '...';
-                    } catch (e) {
-                        message = '[No se puede descifrar: AES no disponible en HTTP]';
-                    }
-                }
-            }
-            
-            DEBUG.success('Mensaje descifrado: ' + message);
-            
-            // Verificar firma (simplificado)
-            let signatureValid = true;
-            if (envelope.signature) {
-                const expectedSignature = await this.sign(message);
-                signatureValid = (expectedSignature === envelope.signature);
-                DEBUG.crypto('Firma verificada: ' + (signatureValid ? 'VÁLIDA' : 'INVÁLIDA'));
-            }
-            
-            return {
-                message: message,
-                signatureValid: signatureValid
-            };
-        } catch (error) {
-            DEBUG.error('Error abriendo sobre: ' + error.message);
-            DEBUG.error('Datos del sobre: ' + JSON.stringify(envelope));
-            throw error;
-        }
-    },
-
-    /**
-     * Crea una firma digital (simplificada)
-     * Con fallback para HTTP
-     */
-    async sign(data) {
-        const encoder = new TextEncoder();
-        const dataBuffer = encoder.encode(data);
-        
-        let hashBuffer;
-        if (this.isSecureContext) {
-            hashBuffer = await crypto.subtle.digest('SHA-256', dataBuffer);
-        } else {
-            hashBuffer = await this.sha256Fallback(dataBuffer);
-        }
-        
-        return this.arrayBufferToBase64(hashBuffer);
-    },
-
-    /**
-     * Verifica una firma digital (simplificada)
-     */
-    async verify(data, signature, publicKey) {
-        // En producción, verificar con RSA-PSS
-        const computedSignature = await this.sign(data);
-        return computedSignature === signature;
-    },
-
-    /**
-     * Genera un nonce único para prevenir replay attacks
-     */
-    generateNonce() {
-        const array = new Uint8Array(32);
-        crypto.getRandomValues(array);
-        return this.arrayBufferToBase64(array);
-    },
-
-    /**
-     * Utilidades de conversión
+     * Convierte ArrayBuffer a string Base64
      */
     arrayBufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
@@ -474,6 +34,9 @@ const CryptoModule = {
         return btoa(binary);
     },
 
+    /**
+     * Convierte string Base64 a ArrayBuffer
+     */
     base64ToArrayBuffer(base64) {
         const binary = atob(base64);
         const bytes = new Uint8Array(binary.length);
@@ -483,17 +46,519 @@ const CryptoModule = {
         return bytes.buffer;
     },
 
+    // ==================== GENERACIÓN DE CLAVES ====================
+
     /**
-     * Genera un hash SHA-256 de un string
+     * Genera una clave AES-256 aleatoria (32 bytes)
+     * @returns {Uint8Array} Clave AES como array de bytes
      */
-    async sha256(message) {
+    generateRandomAESKey() {
+        const key = new Uint8Array(32); // 256 bits
+        crypto.getRandomValues(key);
+        return key;
+    },
+
+    /**
+     * Genera un IV (Vector de Inicialización) aleatorio (16 bytes)
+     * @returns {string} IV en formato Base64
+     */
+    generateIV() {
+        const iv = new Uint8Array(16); // 128 bits
+        crypto.getRandomValues(iv);
+        return this.arrayBufferToBase64(iv);
+    },
+
+    /**
+     * Genera un nonce único para prevenir replay attacks
+     * @returns {string} Nonce en formato Base64
+     */
+    generateNonce() {
+        const nonce = new Uint8Array(32);
+        crypto.getRandomValues(nonce);
+        return this.arrayBufferToBase64(nonce);
+    },
+
+    // ==================== CIFRADO AES-256-CBC ====================
+
+    /**
+     * Cifra un mensaje con AES-256-CBC
+     * @param {string} message - Mensaje en texto plano
+     * @param {Uint8Array} keyBytes - Clave AES de 32 bytes
+     * @param {string} ivBase64 - IV en formato Base64
+     * @returns {string} Mensaje cifrado en Base64
+     */
+    async encryptAES(message, keyBytes, ivBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Cifrado AES requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+
+            // Importar clave AES
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyBytes,
+                { name: 'AES-CBC', length: 256 },
+                false,
+                ['encrypt']
+            );
+
+            // Cifrar
+            const ivBytes = this.base64ToArrayBuffer(ivBase64);
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-CBC', iv: ivBytes },
+                cryptoKey,
+                data
+            );
+
+            return this.arrayBufferToBase64(encrypted);
+        } catch (error) {
+            console.error('Error en cifrado AES:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Descifra un mensaje con AES-256-CBC
+     * @param {string} encryptedBase64 - Mensaje cifrado en Base64
+     * @param {Uint8Array} keyBytes - Clave AES de 32 bytes
+     * @param {string} ivBase64 - IV en formato Base64
+     * @returns {string} Mensaje descifrado
+     */
+    async decryptAES(encryptedBase64, keyBytes, ivBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Descifrado AES requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Importar clave AES
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyBytes,
+                { name: 'AES-CBC', length: 256 },
+                false,
+                ['decrypt']
+            );
+
+            // Descifrar
+            const ivBytes = this.base64ToArrayBuffer(ivBase64);
+            const encryptedBytes = this.base64ToArrayBuffer(encryptedBase64);
+            
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-CBC', iv: ivBytes },
+                cryptoKey,
+                encryptedBytes
+            );
+
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        } catch (error) {
+            console.error('Error en descifrado AES:', error);
+            throw error;
+        }
+    },
+
+    // ==================== CIFRADO RSA-OAEP ====================
+
+    /**
+     * Importa una clave pública RSA desde formato PEM
+     * @param {string} pemKey - Clave pública en formato PEM
+     * @returns {CryptoKey} Clave pública importada
+     */
+    async importPublicKey(pemKey) {
+        try {
+            // Eliminar header/footer del PEM y espacios
+            const pemHeader = '-----BEGIN PUBLIC KEY-----';
+            const pemFooter = '-----END PUBLIC KEY-----';
+            const pemContents = pemKey
+                .replace(pemHeader, '')
+                .replace(pemFooter, '')
+                .replace(/\s/g, '');
+
+            // Decodificar Base64 a bytes
+            const binaryString = atob(pemContents);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Importar como clave RSA-OAEP
+            return await crypto.subtle.importKey(
+                'spki',
+                bytes.buffer,
+                {
+                    name: 'RSA-OAEP',
+                    hash: 'SHA-256'
+                },
+                true,
+                ['encrypt']
+            );
+        } catch (error) {
+            console.error('Error importando clave pública:', error);
+            throw new Error('No se pudo importar la clave pública RSA');
+        }
+    },
+
+    /**
+     * Importa una clave privada RSA desde formato PEM
+     * @param {string} pemKey - Clave privada en formato PEM
+     * @returns {CryptoKey} Clave privada importada
+     */
+    async importPrivateKey(pemKey) {
+        try {
+            // Eliminar header/footer del PEM y espacios
+            const pemHeader = '-----BEGIN PRIVATE KEY-----';
+            const pemFooter = '-----END PRIVATE KEY-----';
+            const pemContents = pemKey
+                .replace(pemHeader, '')
+                .replace(pemFooter, '')
+                .replace(/\s/g, '');
+
+            // Decodificar Base64 a bytes
+            const binaryString = atob(pemContents);
+            const bytes = new Uint8Array(binaryString.length);
+            for (let i = 0; i < binaryString.length; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Importar como clave RSA-OAEP
+            return await crypto.subtle.importKey(
+                'pkcs8',
+                bytes.buffer,
+                {
+                    name: 'RSA-OAEP',
+                    hash: 'SHA-256'
+                },
+                true,
+                ['decrypt']
+            );
+        } catch (error) {
+            console.error('Error importando clave privada:', error);
+            throw new Error('No se pudo importar la clave privada RSA');
+        }
+    },
+
+    /**
+     * Cifra datos con RSA-OAEP usando clave pública
+     * @param {Uint8Array} data - Datos a cifrar (máximo ~190 bytes para RSA-2048)
+     * @param {string} publicKeyPEM - Clave pública en formato PEM
+     * @returns {string} Datos cifrados en Base64
+     */
+    async encryptRSA(data, publicKeyPEM) {
+        if (!this.isSecureContext) {
+            throw new Error('Cifrado RSA requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            DEBUG.crypto('Cifrando con RSA-OAEP...');
+            
+            // Importar clave pública
+            const publicKey = await this.importPublicKey(publicKeyPEM);
+
+            // Cifrar con RSA-OAEP
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' },
+                publicKey,
+                data
+            );
+
+            DEBUG.crypto('Clave AES cifrada con RSA exitosamente');
+            return this.arrayBufferToBase64(encrypted);
+        } catch (error) {
+            console.error('Error en cifrado RSA:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Descifra datos con RSA-OAEP usando clave privada
+     * @param {string} encryptedBase64 - Datos cifrados en Base64
+     * @param {string} privateKeyPEM - Clave privada en formato PEM
+     * @returns {Uint8Array} Datos descifrados como array de bytes
+     */
+    async decryptRSA(encryptedBase64, privateKeyPEM) {
+        if (!this.isSecureContext) {
+            throw new Error('Descifrado RSA requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            DEBUG.crypto('Descifrando con RSA-OAEP...');
+            
+            // Importar clave privada
+            const privateKey = await this.importPrivateKey(privateKeyPEM);
+
+            // Descifrar con RSA-OAEP
+            const encryptedBytes = this.base64ToArrayBuffer(encryptedBase64);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'RSA-OAEP' },
+                privateKey,
+                encryptedBytes
+            );
+
+            DEBUG.crypto('Clave AES descifrada con RSA exitosamente');
+            return new Uint8Array(decrypted);
+        } catch (error) {
+            console.error('Error en descifrado RSA:', error);
+            throw error;
+        }
+    },
+
+    // ==================== FIRMA DIGITAL ====================
+
+    /**
+     * Crea una firma digital (hash SHA-256 del mensaje)
+     * @param {string} message - Mensaje a firmar
+     * @returns {string} Firma en Base64
+     */
+    async sign(message) {
         const encoder = new TextEncoder();
         const data = encoder.encode(message);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        if (this.isSecureContext) {
+            const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+            return this.arrayBufferToBase64(hashBuffer);
+        } else {
+            // Fallback simple para desarrollo
+            let hash = 0;
+            for (let i = 0; i < message.length; i++) {
+                const char = message.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash;
+            }
+            return btoa(hash.toString());
+        }
+    },
+
+    /**
+     * Verifica una firma digital
+     * @param {string} message - Mensaje original
+     * @param {string} signature - Firma a verificar
+     * @returns {boolean} true si la firma es válida
+     */
+    async verify(message, signature) {
+        const computedSignature = await this.sign(message);
+        return computedSignature === signature;
+    },
+
+    // ==================== CIFRADO HÍBRIDO (RSA + AES) ====================
+
+    /**
+     * Crea un sobre cifrado usando cifrado híbrido RSA + AES
+     * 
+     * FLUJO:
+     * 1. Generar clave AES aleatoria (32 bytes)
+     * 2. Generar IV aleatorio (16 bytes)
+     * 3. Cifrar mensaje con AES-256-CBC
+     * 4. Cifrar clave AES con RSA (clave pública del destinatario)
+     * 5. Crear firma del mensaje original
+     * 
+     * @param {string} message - Mensaje a cifrar
+     * @param {string} recipientPublicKey - Clave pública RSA del destinatario (PEM)
+     * @param {number} senderId - ID del usuario emisor
+     * @param {number} recipientId - ID del usuario destinatario
+     * @returns {object} Sobre cifrado
+     */
+    async createSecureEnvelope(message, recipientPublicKey, senderId, recipientId) {
+        try {
+            DEBUG.crypto('══════════════════════════════════════════');
+            DEBUG.crypto('   CREANDO SOBRE CIFRADO (RSA + AES)');
+            DEBUG.crypto('══════════════════════════════════════════');
+            DEBUG.crypto('Mensaje: "' + message.substring(0, 50) + (message.length > 50 ? '..."' : '"'));
+            DEBUG.crypto('Emisor ID: ' + senderId);
+            DEBUG.crypto('Destinatario ID: ' + recipientId);
+
+            if (!this.isSecureContext) {
+                throw new Error('El cifrado híbrido requiere HTTPS. Por favor usa una conexión segura.');
+            }
+
+            if (!recipientPublicKey) {
+                throw new Error('Se requiere la clave pública del destinatario');
+            }
+
+            // PASO 1: Generar clave AES aleatoria (única para este mensaje)
+            DEBUG.crypto('');
+            DEBUG.crypto('PASO 1: Generando clave AES-256 aleatoria...');
+            const aesKey = this.generateRandomAESKey();
+            DEBUG.crypto('  ✓ Clave AES generada (32 bytes aleatorios)');
+
+            // PASO 2: Generar IV aleatorio
+            DEBUG.crypto('');
+            DEBUG.crypto('PASO 2: Generando IV aleatorio...');
+            const iv = this.generateIV();
+            DEBUG.crypto('  ✓ IV generado (16 bytes aleatorios)');
+
+            // PASO 3: Cifrar mensaje con AES-256-CBC
+            DEBUG.crypto('');
+            DEBUG.crypto('PASO 3: Cifrando mensaje con AES-256-CBC...');
+            const encryptedMessage = await this.encryptAES(message, aesKey, iv);
+            DEBUG.crypto('  ✓ Mensaje cifrado: ' + encryptedMessage.substring(0, 30) + '...');
+
+            // PASO 4: Cifrar clave AES con RSA (clave pública del destinatario)
+            DEBUG.crypto('');
+            DEBUG.crypto('PASO 4: Cifrando clave AES con RSA-OAEP...');
+            DEBUG.crypto('  Usando clave pública del destinatario');
+            const encryptedAesKey = await this.encryptRSA(aesKey, recipientPublicKey);
+            DEBUG.crypto('  ✓ Clave AES cifrada: ' + encryptedAesKey.substring(0, 30) + '...');
+
+            // PASO 5: Crear firma del mensaje original
+            DEBUG.crypto('');
+            DEBUG.crypto('PASO 5: Creando firma digital (SHA-256)...');
+            const signature = await this.sign(message);
+            DEBUG.crypto('  ✓ Firma creada');
+
+            // Crear sobre completo
+            const envelope = {
+                // Datos cifrados
+                encrypted_message: encryptedMessage,    // Mensaje cifrado con AES
+                encrypted_key: encryptedAesKey,         // Clave AES cifrada con RSA
+                iv: iv,                                  // Vector de inicialización
+                
+                // Metadatos de seguridad
+                signature: signature,                    // Firma digital
+                nonce: this.generateNonce(),            // Anti-replay
+                timestamp: new Date().toISOString(),    // Timestamp
+                
+                // Identificadores
+                sender_id: senderId,
+                recipient_id: recipientId,
+                
+                // Versión del protocolo
+                crypto_version: '2.0',
+                crypto_method: 'RSA_AES_HYBRID'
+            };
+
+            DEBUG.crypto('');
+            DEBUG.crypto('══════════════════════════════════════════');
+            DEBUG.success('✓ SOBRE CIFRADO CREADO EXITOSAMENTE');
+            DEBUG.crypto('  Método: RSA-OAEP + AES-256-CBC');
+            DEBUG.crypto('══════════════════════════════════════════');
+
+            return envelope;
+        } catch (error) {
+            DEBUG.error('Error creando sobre cifrado: ' + error.message);
+            throw error;
+        }
+    },
+
+    /**
+     * Abre un sobre cifrado usando cifrado híbrido RSA + AES
+     * 
+     * FLUJO:
+     * 1. Descifrar clave AES con RSA (mi clave privada)
+     * 2. Descifrar mensaje con AES-256-CBC
+     * 3. Verificar firma digital
+     * 
+     * @param {object} envelope - Sobre cifrado
+     * @param {string} myPrivateKey - MI clave privada RSA (PEM)
+     * @param {string} senderPublicKey - Clave pública del emisor (para verificación futura)
+     * @param {number} myUserId - Mi ID de usuario
+     * @returns {object} {message: string, signatureValid: boolean}
+     */
+    async openSecureEnvelope(envelope, myPrivateKey, senderPublicKey, myUserId) {
+        try {
+            DEBUG.crypto('══════════════════════════════════════════');
+            DEBUG.crypto('   ABRIENDO SOBRE CIFRADO (RSA + AES)');
+            DEBUG.crypto('══════════════════════════════════════════');
+            DEBUG.crypto('Método detectado: ' + (envelope.crypto_method || 'legacy'));
+            DEBUG.crypto('Versión: ' + (envelope.crypto_version || '1.0'));
+
+            // Verificar que es un sobre con cifrado híbrido
+            if (envelope.crypto_method === 'RSA_AES_HYBRID' || envelope.encrypted_key) {
+                // CIFRADO HÍBRIDO RSA + AES
+                
+                if (!myPrivateKey) {
+                    throw new Error('Se requiere clave privada para descifrar. Inicia sesión nuevamente.');
+                }
+
+                if (!envelope.encrypted_key) {
+                    throw new Error('El sobre no contiene la clave AES cifrada');
+                }
+
+                if (!envelope.encrypted_message || !envelope.iv) {
+                    throw new Error('Sobre incompleto: faltan datos de cifrado');
+                }
+
+                // PASO 1: Descifrar clave AES con RSA (mi clave privada)
+                DEBUG.crypto('');
+                DEBUG.crypto('PASO 1: Descifrando clave AES con RSA-OAEP...');
+                DEBUG.crypto('  Usando MI clave privada');
+                const aesKey = await this.decryptRSA(envelope.encrypted_key, myPrivateKey);
+                DEBUG.crypto('  ✓ Clave AES recuperada (32 bytes)');
+
+                // PASO 2: Descifrar mensaje con AES-256-CBC
+                DEBUG.crypto('');
+                DEBUG.crypto('PASO 2: Descifrando mensaje con AES-256-CBC...');
+                const message = await this.decryptAES(envelope.encrypted_message, aesKey, envelope.iv);
+                DEBUG.crypto('  ✓ Mensaje descifrado: "' + message.substring(0, 30) + (message.length > 30 ? '..."' : '"'));
+
+                // PASO 3: Verificar firma
+                DEBUG.crypto('');
+                DEBUG.crypto('PASO 3: Verificando firma digital...');
+                let signatureValid = true;
+                if (envelope.signature) {
+                    signatureValid = await this.verify(message, envelope.signature);
+                    DEBUG.crypto('  ' + (signatureValid ? '✓ Firma VÁLIDA' : '✗ Firma INVÁLIDA'));
+                } else {
+                    DEBUG.warn('  ⚠ Sin firma digital');
+                }
+
+                DEBUG.crypto('');
+                DEBUG.crypto('══════════════════════════════════════════');
+                DEBUG.success('✓ MENSAJE DESCIFRADO EXITOSAMENTE');
+                DEBUG.crypto('══════════════════════════════════════════');
+
+                return {
+                    message: message,
+                    signatureValid: signatureValid
+                };
+            } else {
+                // FALLBACK: Método antiguo (derivación de claves desde IDs)
+                // Esto es para compatibilidad con mensajes antiguos
+                DEBUG.warn('⚠ Usando método de descifrado antiguo (compatibilidad)');
+                return await this.openLegacyEnvelope(envelope, myUserId);
+            }
+        } catch (error) {
+            DEBUG.error('Error abriendo sobre: ' + error.message);
+            throw error;
+        }
+    },
+
+    /**
+     * [LEGACY] Abre sobres con el método antiguo (derivación de claves desde IDs)
+     * Solo para compatibilidad con mensajes existentes
+     */
+    async openLegacyEnvelope(envelope, myUserId) {
+        DEBUG.warn('Usando método LEGACY - Solo para mensajes antiguos');
+        
+        const senderId = envelope.sender_id;
+        const recipientId = envelope.recipient_id || myUserId;
+
+        // Generar clave desde IDs (método antiguo)
+        const sortedIds = [senderId, recipientId].sort((a, b) => a - b);
+        const seed = `chat_seguro_${sortedIds[0]}_${sortedIds[1]}_v1`;
+        
+        const encoder = new TextEncoder();
+        const seedData = encoder.encode(seed);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', seedData);
+        const aesKey = new Uint8Array(hashBuffer);
+
+        // Descifrar
+        const message = await this.decryptAES(envelope.encrypted_message, aesKey, envelope.iv);
+        
+        // Verificar firma
+        let signatureValid = true;
+        if (envelope.signature) {
+            signatureValid = await this.verify(message, envelope.signature);
+        }
+
+        return {
+            message: message,
+            signatureValid: signatureValid
+        };
     }
 };
 
-// Exportar para uso en otros módulos
+// Exportar para uso global
 window.CryptoModule = CryptoModule;

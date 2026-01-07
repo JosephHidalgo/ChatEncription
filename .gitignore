@@ -39,6 +39,7 @@ Thumbs.db
 
 TESTING_GUIDE.md
 NETWORK_SETUP.md
+CIFRADO_HIBRIDO.md
 INSTALL.md
 verify_db.py
 demo_crypto.py

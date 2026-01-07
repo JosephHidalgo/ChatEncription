@@ -87,6 +87,14 @@ const API = {
     },
 
     /**
+     * Obtener MI clave privada RSA
+     * IMPORTANTE: Solo llamar una vez al iniciar sesión
+     */
+    async getMyPrivateKey() {
+        return this.request('/auth/me/private-key');
+    },
+
+    /**
      * Configurar 2FA
      */
     async setup2FA() {

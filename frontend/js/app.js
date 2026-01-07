@@ -249,15 +249,27 @@ async function handleLogin(e) {
         localStorage.setItem(CONFIG.STORAGE_KEYS.ACCESS_TOKEN, response.access_token);
         localStorage.setItem(CONFIG.STORAGE_KEYS.REFRESH_TOKEN, response.refresh_token);
         
-        // Guardar claves privadas (en producción usar almacenamiento más seguro)
-        localStorage.setItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY, response.private_key_rsa);
-        
         // Cargar usuario
         currentUser = await API.getCurrentUser();
         
         // Guardar ID de usuario para cifrado
         localStorage.setItem(CONFIG.STORAGE_KEYS.USER_ID, currentUser.id.toString());
         DEBUG.info('Usuario ID guardado: ' + currentUser.id);
+        
+        // IMPORTANTE: Obtener y guardar clave privada RSA para cifrado híbrido
+        try {
+            DEBUG.crypto('Obteniendo clave privada RSA del servidor...');
+            const keyData = await API.getMyPrivateKey();
+            if (keyData && keyData.private_key_rsa) {
+                localStorage.setItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY, keyData.private_key_rsa);
+                DEBUG.success('✓ Clave privada RSA guardada en localStorage');
+            } else {
+                DEBUG.warn('No se recibió clave privada del servidor');
+            }
+        } catch (keyError) {
+            DEBUG.error('Error obteniendo clave privada: ' + keyError.message);
+            showToast('warning', 'Advertencia', 'No se pudo obtener la clave de cifrado. Algunos mensajes no podrán descifrarse.');
+        }
         
         showToast('success', 'Login exitoso', `Bienvenido ${currentUser.username}`);
         showChatScreen();
@@ -293,7 +305,25 @@ async function handleRegister(e) {
     submitBtn.textContent = 'Registrando...';
     
     try {
-        await API.register(username, email, password);
+        const user = await API.register(username, email, password);
+        
+        // Si el servidor devuelve la clave privada, guardarla
+        // Esto solo ocurre en el registro inicial
+        if (user.encrypted_private_key_rsa) {
+            DEBUG.crypto('Clave privada recibida en registro');
+            // La clave puede venir como bytes o como string
+            let privateKeyPem;
+            if (typeof user.encrypted_private_key_rsa === 'string') {
+                privateKeyPem = user.encrypted_private_key_rsa;
+            } else if (user.encrypted_private_key_rsa.data) {
+                // Si viene como array de bytes
+                privateKeyPem = new TextDecoder().decode(new Uint8Array(user.encrypted_private_key_rsa.data));
+            }
+            if (privateKeyPem) {
+                localStorage.setItem('temp_private_key_' + user.id, privateKeyPem);
+                DEBUG.success('Clave privada guardada temporalmente');
+            }
+        }
         
         showToast('success', 'Registro exitoso', 'Ahora puedes iniciar sesión');
         showLoginForm();
@@ -442,6 +472,12 @@ async function loadMessageHistory(recipientId) {
             myUserId = currentUser.id;
         }
         
+        // Obtener MI clave privada para descifrar mensajes
+        const myPrivateKey = localStorage.getItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY);
+        if (!myPrivateKey) {
+            DEBUG.warn('No hay clave privada guardada - algunos mensajes no podrán descifrarse');
+        }
+        
         // Descifrar y mostrar cada mensaje
         for (const msg of messages) {
             try {
@@ -454,10 +490,11 @@ async function loadMessageHistory(recipientId) {
                     envelope.sender_id = msg.sender_id;
                     envelope.recipient_id = msg.recipient_id;
                     
+                    // Usar cifrado híbrido con MI clave privada
                     const decrypted = await CryptoModule.openSecureEnvelope(
                         envelope,
-                        null,  // privateKey no se usa
-                        null,  // senderPublicKey no se usa
+                        myPrivateKey,  // MI clave privada RSA
+                        null,          // senderPublicKey (para verificación futura)
                         myUserId
                     );
                     

@@ -207,6 +207,43 @@ async def get_user_public_key(
     )
 
 
+@router.get("/me/private-key")
+async def get_my_private_key(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Obtiene la clave privada RSA del usuario actual.
+    
+    IMPORTANTE: 
+    - Solo debe llamarse una vez al iniciar sesión
+    - La clave debe guardarse de forma segura en el cliente
+    - Esta clave es necesaria para descifrar mensajes recibidos
+    
+    Returns:
+        Clave privada RSA en formato PEM
+    """
+    if not current_user.encrypted_private_key_rsa:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Clave privada no disponible. Contacte al administrador."
+        )
+    
+    # Decodificar la clave privada (está almacenada como bytes)
+    try:
+        private_key_pem = current_user.encrypted_private_key_rsa.decode('utf-8')
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error al decodificar la clave privada"
+        )
+    
+    return {
+        "private_key_rsa": private_key_pem,
+        "user_id": current_user.id
+    }
+
+
 @router.get("/users", response_model=List[UserResponse])
 async def list_users(
     current_user: User = Depends(get_current_user),
