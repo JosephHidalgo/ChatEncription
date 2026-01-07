@@ -248,15 +248,22 @@ class WebSocketManager {
             // Obtener clave pública del destinatario
             DEBUG.info('Obteniendo clave pública del destinatario...');
             const recipientKey = await API.getUserPublicKey(recipientId);
-            DEBUG.success('Clave pública obtenida');
+            DEBUG.success('Clave pública del destinatario obtenida');
+            
+            // Obtener MI clave pública (para cifrar copia para mí mismo)
+            DEBUG.info('Obteniendo MI clave pública...');
+            const myKey = await API.getUserPublicKey(myUserId);
+            DEBUG.success('Mi clave pública obtenida');
             
             // Crear sobre cifrado con los IDs de usuario
-            DEBUG.crypto('Creando sobre cifrado...');
+            // Se cifra la clave AES tanto para el destinatario como para mí (emisor)
+            DEBUG.crypto('Creando sobre cifrado (dual encryption)...');
             const envelope = await CryptoModule.createSecureEnvelope(
                 message,
-                recipientKey.public_key_rsa,
-                myUserId,      // Sender ID
-                recipientId    // Recipient ID
+                recipientKey.public_key_rsa,  // Clave pública del destinatario
+                myUserId,                      // Sender ID
+                recipientId,                   // Recipient ID  
+                myKey.public_key_rsa           // MI clave pública (para mi copia)
             );
             
             DEBUG.crypto('Sobre cifrado creado', envelope);

@@ -351,16 +351,20 @@ const CryptoModule = {
      * 1. Generar clave AES aleatoria (32 bytes)
      * 2. Generar IV aleatorio (16 bytes)
      * 3. Cifrar mensaje con AES-256-CBC
-     * 4. Cifrar clave AES con RSA (clave pública del destinatario)
+     * 4. Cifrar clave AES con RSA para AMBOS: destinatario Y emisor
      * 5. Crear firma del mensaje original
+     * 
+     * NOTA: La clave AES se cifra dos veces para que tanto el emisor
+     * como el destinatario puedan descifrar el mensaje posteriormente.
      * 
      * @param {string} message - Mensaje a cifrar
      * @param {string} recipientPublicKey - Clave pública RSA del destinatario (PEM)
      * @param {number} senderId - ID del usuario emisor
      * @param {number} recipientId - ID del usuario destinatario
+     * @param {string} senderPublicKey - Clave pública RSA del emisor (PEM) - OPCIONAL
      * @returns {object} Sobre cifrado
      */
-    async createSecureEnvelope(message, recipientPublicKey, senderId, recipientId) {
+    async createSecureEnvelope(message, recipientPublicKey, senderId, recipientId, senderPublicKey = null) {
         try {
             DEBUG.crypto('══════════════════════════════════════════');
             DEBUG.crypto('   CREANDO SOBRE CIFRADO (RSA + AES)');
@@ -395,12 +399,22 @@ const CryptoModule = {
             const encryptedMessage = await this.encryptAES(message, aesKey, iv);
             DEBUG.crypto('  ✓ Mensaje cifrado: ' + encryptedMessage.substring(0, 30) + '...');
 
-            // PASO 4: Cifrar clave AES con RSA (clave pública del destinatario)
+            // PASO 4: Cifrar clave AES con RSA para el DESTINATARIO
             DEBUG.crypto('');
             DEBUG.crypto('PASO 4: Cifrando clave AES con RSA-OAEP...');
-            DEBUG.crypto('  Usando clave pública del destinatario');
-            const encryptedAesKey = await this.encryptRSA(aesKey, recipientPublicKey);
-            DEBUG.crypto('  ✓ Clave AES cifrada: ' + encryptedAesKey.substring(0, 30) + '...');
+            DEBUG.crypto('  4a. Usando clave pública del DESTINATARIO');
+            const encryptedAesKeyForRecipient = await this.encryptRSA(aesKey, recipientPublicKey);
+            DEBUG.crypto('  ✓ Clave AES cifrada para destinatario');
+
+            // PASO 4b: Cifrar clave AES con RSA para el EMISOR (yo mismo)
+            let encryptedAesKeyForSender = null;
+            if (senderPublicKey) {
+                DEBUG.crypto('  4b. Usando clave pública del EMISOR (para mi historial)');
+                encryptedAesKeyForSender = await this.encryptRSA(aesKey, senderPublicKey);
+                DEBUG.crypto('  ✓ Clave AES cifrada para emisor');
+            } else {
+                DEBUG.warn('  ⚠ No se proporcionó clave pública del emisor');
+            }
 
             // PASO 5: Crear firma del mensaje original
             DEBUG.crypto('');
@@ -411,9 +425,10 @@ const CryptoModule = {
             // Crear sobre completo
             const envelope = {
                 // Datos cifrados
-                encrypted_message: encryptedMessage,    // Mensaje cifrado con AES
-                encrypted_key: encryptedAesKey,         // Clave AES cifrada con RSA
-                iv: iv,                                  // Vector de inicialización
+                encrypted_message: encryptedMessage,              // Mensaje cifrado con AES
+                encrypted_key: encryptedAesKeyForRecipient,       // Clave AES cifrada para DESTINATARIO
+                encrypted_key_sender: encryptedAesKeyForSender,   // Clave AES cifrada para EMISOR
+                iv: iv,                                           // Vector de inicialización
                 
                 // Metadatos de seguridad
                 signature: signature,                    // Firma digital
@@ -481,10 +496,29 @@ const CryptoModule = {
                 }
 
                 // PASO 1: Descifrar clave AES con RSA (mi clave privada)
+                // Determinar si soy el emisor o el destinatario para usar la clave correcta
                 DEBUG.crypto('');
                 DEBUG.crypto('PASO 1: Descifrando clave AES con RSA-OAEP...');
-                DEBUG.crypto('  Usando MI clave privada');
-                const aesKey = await this.decryptRSA(envelope.encrypted_key, myPrivateKey);
+                DEBUG.crypto('  Mi user ID: ' + myUserId);
+                DEBUG.crypto('  Sender ID del sobre: ' + envelope.sender_id);
+                DEBUG.crypto('  Recipient ID del sobre: ' + envelope.recipient_id);
+                
+                const amISender = (envelope.sender_id === myUserId);
+                DEBUG.crypto('  ¿Soy el emisor? ' + (amISender ? 'SÍ' : 'NO'));
+                
+                let encryptedKeyToUse;
+                if (amISender && envelope.encrypted_key_sender) {
+                    // Soy el emisor - usar la clave cifrada para mí
+                    DEBUG.crypto('  → Usando encrypted_key_sender (clave para EMISOR)');
+                    encryptedKeyToUse = envelope.encrypted_key_sender;
+                } else {
+                    // Soy el destinatario - usar la clave cifrada para el destinatario
+                    DEBUG.crypto('  → Usando encrypted_key (clave para DESTINATARIO)');
+                    encryptedKeyToUse = envelope.encrypted_key;
+                }
+                
+                DEBUG.crypto('  Usando MI clave privada para descifrar...');
+                const aesKey = await this.decryptRSA(encryptedKeyToUse, myPrivateKey);
                 DEBUG.crypto('  ✓ Clave AES recuperada (32 bytes)');
 
                 // PASO 2: Descifrar mensaje con AES-256-CBC
