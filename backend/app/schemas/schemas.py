@@ -19,6 +19,8 @@ class UserBase(BaseModel):
 class UserCreate(UserBase):
     """Schema para creación de usuario"""
     password: str = Field(..., min_length=settings.PASSWORD_MIN_LENGTH)
+    public_key: Optional[str] = None 
+    encrypted_private_key: Optional[str] = None  
     
     @validator('password')
     def validate_password(cls, v):
@@ -34,7 +36,7 @@ class UserLogin(BaseModel):
     """Schema para login"""
     username: str
     password: str
-    totp_code: Optional[str] = None  # Código TOTP para 2FA
+    totp_code: Optional[str] = None
 
 
 class UserResponse(UserBase):
@@ -43,6 +45,7 @@ class UserResponse(UserBase):
     is_active: bool
     is_verified: bool
     totp_enabled: bool
+    public_key_rsa: Optional[str] = None
     created_at: datetime
     last_login: Optional[datetime]
     

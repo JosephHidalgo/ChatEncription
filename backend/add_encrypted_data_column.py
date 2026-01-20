@@ -8,7 +8,6 @@ from app.core.database import engine
 async def add_column():
     async with engine.begin() as conn:
         try:
-            # Verificar si la columna existe
             result = await conn.execute(text("""
                 SELECT column_name 
                 FROM information_schema.columns 

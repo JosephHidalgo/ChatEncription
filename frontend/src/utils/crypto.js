@@ -1,0 +1,545 @@
+const CryptoModule = {
+    isSecureContext: !!(window.crypto && window.crypto.subtle),
+    debugMode: true, // Activar logs de debug
+
+    log(operation, data) {
+        if (!this.debugMode) return;
+        console.group(`🔐 [CRYPTO] ${operation}`);
+        console.log(data);
+        console.groupEnd();
+    },
+
+    // ==================== UTILIDADES DE CONVERSIÓN ====================
+
+    arrayBufferToBase64(buffer) {
+        const bytes = new Uint8Array(buffer);
+        let binary = '';
+        for (let i = 0; i < bytes.byteLength; i++) {
+            binary += String.fromCharCode(bytes[i]);
+        }
+        return btoa(binary);
+    },
+
+    base64ToArrayBuffer(base64) {
+        const binary = atob(base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+        }
+        return bytes.buffer;
+    },
+
+    /**
+     * Extrae el contenido base64 de una clave PEM
+     * Elimina headers, footers y saltos de línea
+     */
+    pemToBase64(pem) {
+        if (!pem) return pem;
+        
+        this.log('pemToBase64 - Input', {
+            pemLength: pem.length,
+            pemStart: pem.substring(0, 50) + '...',
+            hasPemHeaders: pem.includes('-----BEGIN')
+        });
+        
+        const cleaned = pem
+            .replace(/-----BEGIN [A-Z ]+-----/g, '')
+            .replace(/-----END [A-Z ]+-----/g, '')
+            .replace(/\s/g, '');
+            
+        this.log('pemToBase64 - Output', {
+            cleanedLength: cleaned.length,
+            cleanedStart: cleaned.substring(0, 50) + '...'
+        });
+        
+        return cleaned;
+    },
+
+    // ==================== GENERACIÓN DE CLAVES ====================
+
+    generateRandomAESKey() {
+        const key = new Uint8Array(32); // 256 bits
+        crypto.getRandomValues(key);
+        return key;
+    },
+
+    generateIV() {
+        const iv = new Uint8Array(16); // 128 bits
+        crypto.getRandomValues(iv);
+        return this.arrayBufferToBase64(iv);
+    },
+
+    generateNonce() {
+        const nonce = new Uint8Array(32);
+        crypto.getRandomValues(nonce);
+        return this.arrayBufferToBase64(nonce);
+    },
+
+    // ==================== CIFRADO AES-256-CBC ====================
+
+    async encryptAES(message, keyBytes, ivBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Cifrado AES requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyBytes,
+                { name: 'AES-CBC', length: 256 },
+                false,
+                ['encrypt']
+            );
+
+            const iv = this.base64ToArrayBuffer(ivBase64);
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'AES-CBC', iv: iv },
+                cryptoKey,
+                data
+            );
+
+            return this.arrayBufferToBase64(encrypted);
+        } catch (error) {
+            console.error('Error cifrando con AES:', error);
+            throw error;
+        }
+    },
+
+    async decryptAES(encryptedBase64, keyBytes, ivBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Descifrado AES requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            const cryptoKey = await crypto.subtle.importKey(
+                'raw',
+                keyBytes,
+                { name: 'AES-CBC', length: 256 },
+                false,
+                ['decrypt']
+            );
+
+            const iv = this.base64ToArrayBuffer(ivBase64);
+            const encrypted = this.base64ToArrayBuffer(encryptedBase64);
+
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-CBC', iv: iv },
+                cryptoKey,
+                encrypted
+            );
+
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        } catch (error) {
+            console.error('❌ Error descifrando con AES:', error);
+            throw error;
+        }
+    },
+
+    // ==================== CIFRADO RSA ====================
+
+    async generateRSAKeyPair() {
+        if (!this.isSecureContext) {
+            throw new Error('Generación de claves RSA requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            const keyPair = await crypto.subtle.generateKey(
+                {
+                    name: 'RSA-OAEP',
+                    modulusLength: 2048,
+                    publicExponent: new Uint8Array([1, 0, 1]),
+                    hash: 'SHA-256'
+                },
+                true,
+                ['encrypt', 'decrypt']
+            );
+
+            const publicKey = await crypto.subtle.exportKey('spki', keyPair.publicKey);
+            const privateKey = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+            return {
+                publicKey: this.arrayBufferToBase64(publicKey),
+                privateKey: this.arrayBufferToBase64(privateKey)
+            };
+        } catch (error) {
+            console.error('Error generando par de claves RSA:', error);
+            throw error;
+        }
+    },
+
+    async encryptRSA(data, publicKeyBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Cifrado RSA requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            this.log('encryptRSA - Start', {
+                dataType: typeof data,
+                dataLength: typeof data === 'string' ? data.length : data.byteLength,
+                publicKeyLength: publicKeyBase64?.length,
+                publicKeyStart: publicKeyBase64?.substring(0, 50) + '...'
+            });
+            
+            // Limpiar formato PEM si es necesario
+            const cleanBase64 = this.pemToBase64(publicKeyBase64);
+            const publicKeyBuffer = this.base64ToArrayBuffer(cleanBase64);
+            const publicKey = await crypto.subtle.importKey(
+                'spki',
+                publicKeyBuffer,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                false,
+                ['encrypt']
+            );
+            
+            this.log('encryptRSA - Key Imported', { keyType: 'RSA-OAEP' });
+
+            const dataBuffer = typeof data === 'string' 
+                ? new TextEncoder().encode(data)
+                : data;
+
+            const encrypted = await crypto.subtle.encrypt(
+                { name: 'RSA-OAEP' },
+                publicKey,
+                dataBuffer
+            );
+            
+            const result = this.arrayBufferToBase64(encrypted);
+            
+            this.log('encryptRSA - Success', {
+                encryptedLength: result.length,
+                encryptedStart: result.substring(0, 50) + '...'
+            });
+
+            return result;
+        } catch (error) {
+            console.error('Error cifrando con RSA:', error);
+            throw error;
+        }
+    },
+
+    async decryptRSA(encryptedBase64, privateKeyBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Descifrado RSA requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Limpiar formato PEM si es necesario
+            const cleanBase64 = this.pemToBase64(privateKeyBase64);
+            const privateKeyBuffer = this.base64ToArrayBuffer(cleanBase64);
+            const privateKey = await crypto.subtle.importKey(
+                'pkcs8',
+                privateKeyBuffer,
+                { name: 'RSA-OAEP', hash: 'SHA-256' },
+                false,
+                ['decrypt']
+            );
+
+            const encrypted = this.base64ToArrayBuffer(encryptedBase64);
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'RSA-OAEP' },
+                privateKey,
+                encrypted
+            );
+
+            return decrypted;
+        } catch (error) {
+            console.error('Error descifrando con RSA:', error);
+            throw error;
+        }
+    },
+
+    // ==================== CIFRADO HÍBRIDO ====================
+
+    async encryptMessage(message, recipientPublicKey) {
+        try {
+            this.log('encryptMessage - Start', {
+                messageLength: message?.length,
+                hasRecipientKey: !!recipientPublicKey
+            });
+            
+            const aesKey = this.generateRandomAESKey();
+            const iv = this.generateIV();
+            const nonce = this.generateNonce();
+            
+            this.log('encryptMessage - Keys Generated', {
+                aesKeyLength: aesKey.length,
+                ivLength: iv.length,
+                nonceLength: nonce.length
+            });
+
+            const encryptedMessage = await this.encryptAES(message, aesKey, iv);
+            const encryptedAESKey = await this.encryptRSA(aesKey, recipientPublicKey);
+            
+            const result = {
+                encrypted_message: encryptedMessage,
+                encrypted_key: encryptedAESKey,
+                iv: iv,
+                nonce: nonce
+            };
+            
+            this.log('encryptMessage - Success', {
+                encrypted_message_length: encryptedMessage.length,
+                encrypted_key_length: encryptedAESKey.length
+            });
+
+            return result;
+        } catch (error) {
+            console.error('Error en cifrado híbrido:', error);
+            throw error;
+        }
+    },
+
+    async decryptMessage(encryptedData, privateKey) {
+        try {
+            console.group('🔓 Desencriptando mensaje...');
+            console.log('📦 Datos cifrados recibidos:');
+            console.log('  • Mensaje cifrado:', encryptedData?.encrypted_message?.substring(0, 50) + '...');
+            console.log('  • Clave AES cifrada:', encryptedData?.encrypted_key?.substring(0, 50) + '...');
+            console.log('  • IV:', encryptedData?.iv);
+            
+            const { encrypted_message, encrypted_key, iv } = encryptedData;
+            
+            console.log('\n🔑 Paso 1: Descifrando clave AES con RSA-OAEP...');
+            console.log('  • Clave privada (longitud):', privateKey?.length, 'chars');
+            const aesKeyBuffer = await this.decryptRSA(encrypted_key, privateKey);
+            const aesKey = new Uint8Array(aesKeyBuffer);
+            console.log('  ✓ Clave AES descifrada:', aesKey.length, 'bytes');
+            
+            console.log('\n📝 Paso 2: Descifrando mensaje con AES-256-CBC...');
+            console.log('  • Algoritmo: AES-256-CBC');
+            console.log('  • Longitud clave:', aesKey.length * 8, 'bits');
+            const message = await this.decryptAES(encrypted_message, aesKey, iv);
+            console.log('  ✓ Mensaje descifrado:', message.substring(0, 100));
+            
+            console.log('\n✅ Desencriptación completada exitosamente');
+            console.groupEnd();
+            
+            return message;
+        } catch (error) {
+            console.error('❌ Error en descifrado:', error);
+            console.groupEnd();
+            throw error;
+        }
+    },
+
+    // ==================== FIRMAS DIGITALES ====================
+
+    async generateSigningKeyPair() {
+        if (!this.isSecureContext) {
+            throw new Error('Generación de claves de firma requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            const keyPair = await crypto.subtle.generateKey(
+                {
+                    name: 'RSA-PSS',
+                    modulusLength: 2048,
+                    publicExponent: new Uint8Array([1, 0, 1]),
+                    hash: 'SHA-256'
+                },
+                true,
+                ['sign', 'verify']
+            );
+
+            const publicKey = await crypto.subtle.exportKey('spki', keyPair.publicKey);
+            const privateKey = await crypto.subtle.exportKey('pkcs8', keyPair.privateKey);
+
+            return {
+                publicKey: this.arrayBufferToBase64(publicKey),
+                privateKey: this.arrayBufferToBase64(privateKey)
+            };
+        } catch (error) {
+            console.error('Error generando claves de firma:', error);
+            throw error;
+        }
+    },
+
+    async signMessage(message, privateKeyBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Firma de mensajes requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Limpiar formato PEM si es necesario
+            const cleanBase64 = this.pemToBase64(privateKeyBase64);
+            const privateKeyBuffer = this.base64ToArrayBuffer(cleanBase64);
+            const privateKey = await crypto.subtle.importKey(
+                'pkcs8',
+                privateKeyBuffer,
+                { name: 'RSA-PSS', hash: 'SHA-256' },
+                false,
+                ['sign']
+            );
+
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+
+            const signature = await crypto.subtle.sign(
+                { name: 'RSA-PSS', saltLength: 32 },
+                privateKey,
+                data
+            );
+
+            return this.arrayBufferToBase64(signature);
+        } catch (error) {
+            console.error('Error firmando mensaje:', error);
+            throw error;
+        }
+    },
+
+    async verifySignature(message, signatureBase64, publicKeyBase64) {
+        if (!this.isSecureContext) {
+            throw new Error('Verificación de firma requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Limpiar formato PEM si es necesario
+            const cleanBase64 = this.pemToBase64(publicKeyBase64);
+            const publicKeyBuffer = this.base64ToArrayBuffer(cleanBase64);
+            const publicKey = await crypto.subtle.importKey(
+                'spki',
+                publicKeyBuffer,
+                { name: 'RSA-PSS', hash: 'SHA-256' },
+                false,
+                ['verify']
+            );
+
+            const encoder = new TextEncoder();
+            const data = encoder.encode(message);
+            const signature = this.base64ToArrayBuffer(signatureBase64);
+
+            const isValid = await crypto.subtle.verify(
+                { name: 'RSA-PSS', saltLength: 32 },
+                publicKey,
+                signature,
+                data
+            );
+
+            return isValid;
+        } catch (error) {
+            console.error('Error verificando firma:', error);
+            return false;
+        }
+    },
+
+    // ==================== CIFRADO DE CLAVE PRIVADA CON PASSWORD ====================
+
+    /**
+     * Deriva una clave AES-256 de una contraseña usando PBKDF2
+     */
+    async deriveKeyFromPassword(password, salt) {
+        if (!this.isSecureContext) {
+            throw new Error('Derivación de clave requiere contexto seguro (HTTPS)');
+        }
+
+        const encoder = new TextEncoder();
+        const passwordBuffer = encoder.encode(password);
+
+        // Importar la contraseña como clave
+        const baseKey = await crypto.subtle.importKey(
+            'raw',
+            passwordBuffer,
+            'PBKDF2',
+            false,
+            ['deriveBits', 'deriveKey']
+        );
+
+        // Derivar clave AES usando PBKDF2
+        const derivedKey = await crypto.subtle.deriveKey(
+            {
+                name: 'PBKDF2',
+                salt: salt,
+                iterations: 100000,
+                hash: 'SHA-256'
+            },
+            baseKey,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt', 'decrypt']
+        );
+
+        return derivedKey;
+    },
+
+    async encryptPrivateKeyWithPassword(privateKeyPEM, password) {
+        if (!this.isSecureContext) {
+            throw new Error('Cifrado requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Generar salt e IV aleatorios
+            const salt = new Uint8Array(16);
+            crypto.getRandomValues(salt);
+
+            const iv = new Uint8Array(12); // GCM recomienda 12 bytes
+            crypto.getRandomValues(iv);
+
+            // Derivar clave de la contraseña
+            const key = await this.deriveKeyFromPassword(password, salt);
+
+            // Cifrar la clave privada
+            const encoder = new TextEncoder();
+            const data = encoder.encode(privateKeyPEM);
+
+            const ciphertext = await crypto.subtle.encrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                data
+            );
+
+            // Combinar salt:iv:ciphertext y codificar en base64
+            const combined = new Uint8Array(salt.length + iv.length + ciphertext.byteLength);
+            combined.set(salt, 0);
+            combined.set(iv, salt.length);
+            combined.set(new Uint8Array(ciphertext), salt.length + iv.length);
+
+            return this.arrayBufferToBase64(combined);
+        } catch (error) {
+            console.error('Error cifrando clave privada:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Descifra la clave privada RSA usando la contraseña del usuario
+     * Input: base64(salt:iv:ciphertext)
+     */
+    async decryptPrivateKeyWithPassword(encryptedData, password) {
+        if (!this.isSecureContext) {
+            throw new Error('Descifrado requiere contexto seguro (HTTPS)');
+        }
+
+        try {
+            // Decodificar base64
+            const combined = new Uint8Array(this.base64ToArrayBuffer(encryptedData));
+
+            // Extraer salt, iv y ciphertext
+            const salt = combined.slice(0, 16);
+            const iv = combined.slice(16, 28);
+            const ciphertext = combined.slice(28);
+
+            // Derivar clave de la contraseña
+            const key = await this.deriveKeyFromPassword(password, salt);
+
+            // Descifrar
+            const decrypted = await crypto.subtle.decrypt(
+                { name: 'AES-GCM', iv: iv },
+                key,
+                ciphertext
+            );
+
+            // Convertir a string
+            const decoder = new TextDecoder();
+            return decoder.decode(decrypted);
+        } catch (error) {
+            console.error('Error descifrando clave privada:', error);
+            throw new Error('Contraseña incorrecta o datos corruptos');
+        }
+    }
+};
+
+export default CryptoModule;

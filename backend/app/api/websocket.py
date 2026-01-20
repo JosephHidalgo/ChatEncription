@@ -187,7 +187,7 @@ async def save_encrypted_message(
         db: Sesión de base de datos
         sender_id: ID del emisor
         recipient_id: ID del destinatario
-        encrypted_data: Datos del mensaje cifrado
+        encrypted_data: Datos del mensaje cifrado (incluye versión para receptor y emisor)
     
     Returns:
         Mensaje guardado
@@ -195,11 +195,12 @@ async def save_encrypted_message(
     # Generar nonce único para prevenir replay attacks
     nonce = secrets.token_hex(32)
     
-    # Guardar el sobre completo como JSON
+    # Guardar el sobre completo como JSON (incluye ambas versiones cifradas)
     encrypted_data_json = json.dumps(encrypted_data)
     
     logger.info(f"Guardando mensaje: sender={sender_id}, recipient={recipient_id}")
-    logger.info(f"encrypted_content: {encrypted_data.get('encrypted_message', '')[:50]}...")
+    logger.info(f"encrypted_content (para receptor): {encrypted_data.get('encrypted_message', '')[:50]}...")
+    logger.info(f"sender_encrypted_message (para emisor): {encrypted_data.get('sender_encrypted_message', '')[:50]}...")
     logger.info(f"iv: {encrypted_data.get('iv')}")
     logger.info(f"signature: {encrypted_data.get('signature', '')[:30]}...")
     
@@ -207,11 +208,12 @@ async def save_encrypted_message(
         message = Message(
             sender_id=sender_id,
             recipient_id=recipient_id,
+            # Versión cifrada para el RECEPTOR
             encrypted_content=encrypted_data.get('encrypted_message'),
-            encrypted_aes_key=encrypted_data.get('encrypted_key'),  # Puede ser None si usa clave de sesión
+            encrypted_aes_key=encrypted_data.get('encrypted_key'),
             iv=encrypted_data.get('iv'),
             signature=encrypted_data.get('signature'),
-            encrypted_data=encrypted_data_json,  # Sobre completo en JSON
+            encrypted_data=encrypted_data_json,  # Sobre completo en JSON (incluye versión del emisor)
             nonce=nonce,
             timestamp=datetime.utcnow()
         )

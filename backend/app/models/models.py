@@ -27,10 +27,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     
     # Claves RSA
-    public_key_rsa = Column(Text, nullable=False)  # Clave pública (PEM)
-    encrypted_private_key_rsa = Column(LargeBinary, nullable=True)  # Clave privada cifrada
+    public_key_rsa = Column(Text, nullable=False)
+    encrypted_private_key_rsa = Column(LargeBinary, nullable=True)
     
-    # Autenticación de dos factores (TOTP)
     totp_secret = Column(String(255), nullable=True)
     totp_enabled = Column(Boolean, default=False)
     
@@ -77,20 +76,19 @@ class Message(Base):
     recipient_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
     
     # Contenido cifrado
-    encrypted_content = Column(Text, nullable=False)  # Mensaje cifrado con AES
-    encrypted_aes_key = Column(Text, nullable=True)  # Clave AES cifrada con RSA (puede ser null si usa clave de sesión)
-    iv = Column(String(255), nullable=False)  # Vector de inicialización
-    encrypted_data = Column(Text, nullable=True)  # JSON completo del sobre cifrado (para versión simplificada)
+    encrypted_content = Column(Text, nullable=False)  
+    encrypted_aes_key = Column(Text, nullable=True)  
+    iv = Column(String(255), nullable=False)  
+    encrypted_data = Column(Text, nullable=True)  
     
     # Seguridad
-    signature = Column(Text, nullable=False)  # Firma digital RSA del emisor
+    signature = Column(Text, nullable=False) 
     
     # Metadatos
     timestamp = Column(DateTime, default=func.now(), index=True)
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime, nullable=True)
     
-    # Para prevenir replay attacks
     nonce = Column(String(64), unique=True, nullable=False)
     
     # Relaciones
@@ -114,12 +112,12 @@ class Session(Base):
     access_token_jti = Column(String(255), unique=True, nullable=False, index=True)  # JWT ID
     refresh_token_jti = Column(String(255), unique=True, nullable=True, index=True)
     
-    # Clave de sesión AES (para cifrado rápido en WebSocket)
+    # Clave de sesión AES
     session_key_aes = Column(LargeBinary, nullable=True)
     session_key_created_at = Column(DateTime, default=func.now())
     
     # Información de conexión
-    ip_address = Column(String(45), nullable=True)  # IPv4 o IPv6
+    ip_address = Column(String(45), nullable=True) 
     user_agent = Column(String(500), nullable=True)
     
     # Timestamps
@@ -153,7 +151,7 @@ class AuditLog(Base):
     
     # Acción
     action = Column(String(100), nullable=False, index=True)
-    action_type = Column(String(50), nullable=False, index=True)  # LOGIN, LOGOUT, KEY_ROTATION, etc.
+    action_type = Column(String(50), nullable=False, index=True)  
     
     # Detalles
     details = Column(Text, nullable=True)
@@ -190,4 +188,3 @@ class KeyRotationHistory(Base):
     rotation_reason = Column(String(255), nullable=True)
     rotated_at = Column(DateTime, default=func.now())
     
-    # Relación implícita con User

@@ -45,7 +45,6 @@ class AuthService:
         Returns:
             Usuario creado
         """
-        # Verificar si el usuario ya existe
         result = await self.db.execute(
             select(User).where(
                 (User.username == user_data.username) | (User.email == user_data.email)
@@ -68,16 +67,28 @@ class AuthService:
         # Hash de la contraseña
         password_hash = get_password_hash(user_data.password)
         
-        # Generar par de claves RSA
-        private_key_pem, public_key_pem = crypto_manager.generate_rsa_key_pair()
+        
+        if user_data.public_key:
+            # El cliente maneja sus claves
+            public_key_pem_str = user_data.public_key
+            # Guardar clave privada cifrada si el cliente la envió
+            encrypted_private_key = None
+            if user_data.encrypted_private_key:
+                # Convertir de string a bytes para guardar en LargeBinary
+                encrypted_private_key = user_data.encrypted_private_key.encode('utf-8')
+        else:
+            # Generar par de claves RSA en el servidor (legacy)
+            private_key_pem, public_key_pem = crypto_manager.generate_rsa_key_pair()
+            public_key_pem_str = public_key_pem.decode('utf-8')
+            encrypted_private_key = private_key_pem 
         
         # Crear usuario
         new_user = User(
             username=user_data.username,
             email=user_data.email,
             password_hash=password_hash,
-            public_key_rsa=public_key_pem.decode('utf-8'),
-            # La clave privada se devuelve al cliente, NO se almacena sin cifrar
+            public_key_rsa=public_key_pem_str,
+            encrypted_private_key_rsa=encrypted_private_key,
             totp_secret=generate_totp_secret(),
             totp_enabled=False
         )
@@ -94,10 +105,6 @@ class AuthService:
             ip_address=ip_address,
             success=True
         )
-        
-        # Devolver la clave privada para que el cliente la guarde
-        # En producción, esto debería cifrarse con la contraseña del usuario
-        new_user.encrypted_private_key_rsa = private_key_pem
         
         return new_user
     
@@ -142,7 +149,6 @@ class AuthService:
                 detail="Credenciales incorrectas"
             )
         
-        # Verificar si la cuenta está bloqueada
         if user.account_locked_until and user.account_locked_until > datetime.utcnow():
             await self._create_audit_log(
                 user_id=user.id,
@@ -187,7 +193,6 @@ class AuthService:
                 detail="Credenciales incorrectas"
             )
         
-        # Verificar 2FA si está habilitado
         if user.totp_enabled:
             if not login_data.totp_code:
                 raise HTTPException(
@@ -208,7 +213,6 @@ class AuthService:
                     detail="Código 2FA incorrecto"
                 )
         
-        # Login exitoso: resetear intentos fallidos
         user.failed_login_attempts = 0
         user.account_locked_until = None
         user.last_login = datetime.utcnow()
@@ -275,19 +279,16 @@ class AuthService:
                 detail="Usuario no encontrado"
             )
         
-        # Generar nuevo secreto TOTP
         secret = pyotp.random_base32()
         user.totp_secret = secret
         await self.db.commit()
         
-        # Generar URL para QR code
         totp = pyotp.TOTP(secret)
         qr_url = totp.provisioning_uri(
             name=user.email,
             issuer_name=settings.APP_NAME
         )
         
-        # Generar códigos de respaldo (en producción, cifrarlos)
         backup_codes = [secrets.token_hex(4) for _ in range(10)]
         
         return TOTPSetupResponse(

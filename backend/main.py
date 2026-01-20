@@ -154,38 +154,48 @@ async def get_message_history(
         recipient_id: ID del otro usuario
         limit: Número máximo de mensajes (default 50)
     """
-    from sqlalchemy import or_, and_
+    from sqlalchemy import select, or_, and_
     from app.models.models import Message
+    import json
     
-    result = await db.execute(
-        db.query(Message)
-        .where(
-            or_(
-                and_(Message.sender_id == current_user.id, Message.recipient_id == recipient_id),
-                and_(Message.sender_id == recipient_id, Message.recipient_id == current_user.id)
-            )
+    stmt = select(Message).where(
+        or_(
+            and_(Message.sender_id == current_user.id, Message.recipient_id == recipient_id),
+            and_(Message.sender_id == recipient_id, Message.recipient_id == current_user.id)
         )
-        .order_by(Message.timestamp.desc())
-        .limit(limit)
-    )
+    ).order_by(Message.timestamp.desc()).limit(limit)
+    
+    result = await db.execute(stmt)
     messages = result.scalars().all()
     
-    return {
-        'messages': [
-            {
-                'id': msg.id,
-                'sender_id': msg.sender_id,
-                'recipient_id': msg.recipient_id,
-                'encrypted_content': msg.encrypted_content,
-                'encrypted_aes_key': msg.encrypted_aes_key,
-                'iv': msg.iv,
-                'signature': msg.signature,
-                'timestamp': msg.timestamp.isoformat(),
-                'is_read': msg.is_read
-            }
-            for msg in reversed(messages)
-        ]
-    }
+    message_list = []
+    for msg in reversed(messages):
+        msg_dict = {
+            'id': msg.id,
+            'sender_id': msg.sender_id,
+            'recipient_id': msg.recipient_id,
+            'encrypted_content': msg.encrypted_content,
+            'encrypted_aes_key': msg.encrypted_aes_key,
+            'iv': msg.iv,
+            'signature': msg.signature,
+            'timestamp': msg.timestamp.isoformat(),
+            'is_read': msg.is_read
+        }
+        
+        # Extraer datos del emisor desde encrypted_data JSON si existen
+        if msg.encrypted_data:
+            try:
+                encrypted_data = json.loads(msg.encrypted_data)
+                if 'sender_encrypted_message' in encrypted_data:
+                    msg_dict['sender_encrypted_message'] = encrypted_data['sender_encrypted_message']
+                    msg_dict['sender_encrypted_key'] = encrypted_data['sender_encrypted_key']
+                    msg_dict['sender_iv'] = encrypted_data['sender_iv']
+            except json.JSONDecodeError:
+                pass
+        
+        message_list.append(msg_dict)
+    
+    return {'messages': message_list}
 
 
 # ===================== HEALTH CHECK =====================

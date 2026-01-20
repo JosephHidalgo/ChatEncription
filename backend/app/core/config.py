@@ -13,7 +13,6 @@ class Settings(BaseSettings):
     Todas las variables se cargan desde el archivo .env
     """
     
-    # Información de la Aplicación
     APP_NAME: str = "Sistema de Chat Seguro"
     APP_VERSION: str = "1.0.0"
     DEBUG: bool = True
@@ -55,8 +54,8 @@ class Settings(BaseSettings):
     # CORS - Configuración para red local
     # En desarrollo: permite todos los orígenes
     # En producción: especificar orígenes exactos
-    CORS_ORIGINS: List[str] = ["*"]  # Permite cualquier origen
-    ALLOW_ALL_ORIGINS: bool = True  # Flag para permitir todos los orígenes
+    CORS_ORIGINS: List[str] = ["*"]
+    ALLOW_ALL_ORIGINS: bool = True
     
     # Auditoría
     ENABLE_AUDIT_LOGS: bool = True

@@ -10,7 +10,6 @@ from app.core.config import settings
 import secrets
 
 
-# Configuración de bcrypt para hashing de contraseñas
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 

@@ -13,8 +13,6 @@ async def init_database():
     logger.info("Iniciando creación de tablas...")
     
     async with engine.begin() as conn:
-        # Eliminar todas las tablas existentes (usar con cuidado)
-        # await conn.run_sync(Base.metadata.drop_all)
         
         # Crear todas las tablas
         await conn.run_sync(Base.metadata.create_all)

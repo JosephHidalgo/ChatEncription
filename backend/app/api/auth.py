@@ -29,10 +29,8 @@ from typing import List
 
 router = APIRouter(prefix="/auth", tags=["Autenticación"])
 
-# OAuth2 scheme para extracción de tokens
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Rate limiter
 limiter = Limiter(key_func=get_remote_address)
 
 
@@ -229,7 +227,7 @@ async def get_my_private_key(
             detail="Clave privada no disponible. Contacte al administrador."
         )
     
-    # Decodificar la clave privada (está almacenada como bytes)
+    # Decodificar la clave privada
     try:
         private_key_pem = current_user.encrypted_private_key_rsa.decode('utf-8')
     except Exception as e:
@@ -278,7 +276,6 @@ async def get_message_history(
         Lista de mensajes ordenados por fecha
     """
     try:
-        # Buscar mensajes entre los dos usuarios
         result = await db.execute(
             select(Message)
             .where(
@@ -298,20 +295,17 @@ async def get_message_history(
         # Devolver los mensajes con el sobre cifrado parseado
         result_messages = []
         for msg in messages:
-            # Si tenemos encrypted_data como JSON, parsearlo
             encrypted_data = None
             if msg.encrypted_data:
                 try:
                     encrypted_data = json.loads(msg.encrypted_data)
                 except:
-                    # Si no es JSON válido, construir el sobre manualmente
                     encrypted_data = {
                         "encrypted_message": msg.encrypted_content,
                         "iv": msg.iv,
                         "signature": msg.signature
                     }
             else:
-                # Construir sobre desde campos individuales
                 encrypted_data = {
                     "encrypted_message": msg.encrypted_content,
                     "iv": msg.iv,
@@ -404,7 +398,7 @@ async def get_rotation_history(
             "id": h.id,
             "rotated_at": h.rotated_at,
             "rotation_reason": h.rotation_reason,
-            "old_public_key": h.old_public_key[:50] + "...",  # Truncar para respuesta
+            "old_public_key": h.old_public_key[:50] + "...",
             "new_public_key": h.new_public_key[:50] + "..."
         }
         for h in history
