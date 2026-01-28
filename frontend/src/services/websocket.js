@@ -15,7 +15,13 @@ class WebSocketService {
             online: [],
             offline: [],
             error: [],
-            close: []
+            close: [],
+            group_message: [],
+            group_typing: [],
+            joined_group: [],
+            left_group: [],
+            member_joined_group: [],
+            member_left_group: []
         };
     }
 
@@ -107,7 +113,45 @@ class WebSocketService {
                 case 'online_users':
                     this.emit('online', { users: data.users });
                     break;
-                
+
+                // === Mensajes de grupo ===
+                case 'group_message':
+                case 'new_group_message':
+                    console.log('✓ [WebSocket] Nuevo mensaje de grupo:', data.group_id);
+                    this.emit('group_message', data);
+                    break;
+
+                case 'group_message_sent':
+                    console.log('✓ [WebSocket] Mensaje de grupo enviado confirmado. ID:', data.message_id);
+                    this.emit('group_message', data);
+                    break;
+
+                case 'joined_group':
+                    console.log('✓ [WebSocket] Te uniste al grupo:', data.group_id);
+                    this.emit('joined_group', data);
+                    break;
+
+                case 'left_group':
+                    console.log('✓ [WebSocket] Saliste del grupo:', data.group_id);
+                    this.emit('left_group', data);
+                    break;
+
+                case 'group_typing':
+                case 'group_typing_notification':
+                    console.log('✓ [WebSocket] Usuario escribiendo en grupo:', data.group_id);
+                    this.emit('group_typing', data);
+                    break;
+
+                case 'member_joined_group':
+                    console.log('✓ [WebSocket] Nuevo miembro en grupo:', data.group_id);
+                    this.emit('member_joined_group', data);
+                    break;
+
+                case 'member_left_group':
+                    console.log('✓ [WebSocket] Miembro salió del grupo:', data.group_id);
+                    this.emit('member_left_group', data);
+                    break;
+
                 case 'error':
                     console.error('❌ [WebSocket] Error del servidor:', data.message);
                     break;
@@ -137,7 +181,7 @@ class WebSocketService {
         console.log('Razón:', event.reason || 'Sin razón especificada');
         console.log('¿Cierre limpio?:', event.wasClean);
         console.groupEnd();
-        
+
         this.emit('close');
         this.attemptReconnect();
     }
@@ -196,6 +240,7 @@ class WebSocketService {
     on(event, callback) {
         if (this.listeners[event]) {
             this.listeners[event].push(callback);
+            console.log(`📝 [WebSocket] Listener registrado para evento '${event}'. Total: ${this.listeners[event].length}`);
         }
     }
 
@@ -204,7 +249,10 @@ class WebSocketService {
      */
     off(event, callback) {
         if (this.listeners[event]) {
+            const before = this.listeners[event].length;
             this.listeners[event] = this.listeners[event].filter(cb => cb !== callback);
+            const after = this.listeners[event].length;
+            console.log(`🗑️ [WebSocket] Listener eliminado para evento '${event}'. Antes: ${before}, Después: ${after}`);
         }
     }
 
@@ -213,7 +261,10 @@ class WebSocketService {
      */
     emit(event, data) {
         if (this.listeners[event]) {
+            console.log(`📢 [WebSocket] Emitiendo evento '${event}' a ${this.listeners[event].length} listener(s)`);
             this.listeners[event].forEach(callback => callback(data));
+        } else {
+            console.warn(`⚠️ [WebSocket] No hay listeners para el evento '${event}'`);
         }
     }
 
@@ -234,6 +285,56 @@ class WebSocketService {
         this.send({
             type: 'mark_read',
             message_id: messageId
+        });
+    }
+
+    // ================= MÉTODOS DE GRUPO =================
+
+    /**
+     * Unirse a una sala de grupo
+     */
+    joinGroup(groupId) {
+        console.log('📡 [WebSocket] Uniéndose a grupo:', groupId);
+        this.send({
+            type: 'join_group',
+            group_id: groupId
+        });
+    }
+
+    /**
+     * Salir de una sala de grupo
+     */
+    leaveGroup(groupId) {
+        console.log('📡 [WebSocket] Saliendo de grupo:', groupId);
+        this.send({
+            type: 'leave_group',
+            group_id: groupId
+        });
+    }
+
+    /**
+     * Enviar mensaje a grupo
+     */
+    sendGroupMessage(groupId, encryptedContent, iv, signature) {
+        console.log('📡 [WebSocket] Enviando mensaje a grupo:', groupId);
+        this.send({
+            type: 'group_message',
+            group_id: groupId,
+            encrypted_data: {
+                encrypted_message: encryptedContent,
+                iv: iv,
+                signature: signature
+            }
+        });
+    }
+
+    /**
+     * Enviar notificación de escritura en grupo
+     */
+    sendGroupTyping(groupId) {
+        this.send({
+            type: 'group_typing',
+            group_id: groupId
         });
     }
 

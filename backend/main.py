@@ -12,6 +12,7 @@ import json
 from app.core.config import settings
 from app.core.database import init_db, close_db, get_db
 from app.api import auth, websocket
+from app.api import groups
 from app.api.websocket import manager, get_user_from_websocket_token, handle_websocket_message
 from loguru import logger
 
@@ -55,6 +56,7 @@ app.add_middleware(
 
 # Incluir routers
 app.include_router(auth.router)
+app.include_router(groups.router)
 
 
 # ===================== WEBSOCKET ENDPOINT =====================

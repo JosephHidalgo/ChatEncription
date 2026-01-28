@@ -218,3 +218,118 @@ class KeyRotationResponse(BaseModel):
     private_key_rsa: str
     rotated_at: datetime
     reason: str
+
+
+# ===================== GRUPOS =====================
+
+class GroupCreate(BaseModel):
+    """Schema para creación de grupo"""
+    name: str = Field(..., min_length=3, max_length=100)
+    description: Optional[str] = Field(None, max_length=500)
+    member_ids: list[int] = Field(default_factory=list)  # IDs de miembros iniciales
+    encrypted_keys: dict[str, str]  # {user_id: encrypted_group_key}
+    group_key_hash: str  # SHA-256 hash de la clave AES del grupo
+
+
+class GroupUpdate(BaseModel):
+    """Schema para actualización de grupo"""
+    name: Optional[str] = Field(None, min_length=3, max_length=100)
+    description: Optional[str] = None
+
+
+class GroupMemberResponse(BaseModel):
+    """Schema de respuesta de miembro de grupo"""
+    id: int
+    user_id: int
+    username: str
+    is_admin: bool
+    can_send_messages: bool
+    can_add_members: bool
+    joined_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class GroupResponse(BaseModel):
+    """Schema de respuesta de grupo"""
+    id: int
+    name: str
+    description: Optional[str]
+    admin_id: int
+    created_at: datetime
+    is_active: bool
+    member_count: Optional[int] = None
+    
+    class Config:
+        from_attributes = True
+
+
+class GroupDetailResponse(GroupResponse):
+    """Schema de respuesta detallada de grupo (incluye miembros)"""
+    members: list[GroupMemberResponse]
+
+
+class GroupMessageCreate(BaseModel):
+    """Schema para crear mensaje de grupo"""
+    group_id: int
+    encrypted_content: str
+    iv: str
+    signature: str
+
+
+class GroupMessageResponse(BaseModel):
+    """Schema de respuesta de mensaje de grupo"""
+    id: int
+    group_id: int
+    sender_id: int
+    sender_username: str
+    encrypted_content: str
+    iv: str
+    signature: str
+    timestamp: datetime
+    nonce: str
+    
+    class Config:
+        from_attributes = True
+
+
+class AddMemberRequest(BaseModel):
+    """Schema para agregar miembro a grupo"""
+    user_id: int
+    encrypted_group_key: str  # Clave AES del grupo encriptada con RSA del nuevo miembro
+
+
+class JoinGroupWithCodeRequest(BaseModel):
+    """Schema para unirse a grupo con código"""
+    code: str
+    encrypted_group_key: str  # Cliente encripta la clave con su propia RSA
+
+
+class InviteCodeCreate(BaseModel):
+    """Schema para crear código de invitación"""
+    max_uses: Optional[int] = None  # None = ilimitado
+    expires_in_hours: Optional[int] = None  # None = no expira
+
+
+class InviteCodeResponse(BaseModel):
+    """Schema de respuesta de código de invitación"""
+    id: int
+    code: str
+    group_id: int
+    group_name: str
+    max_uses: Optional[int]
+    current_uses: int
+    expires_at: Optional[datetime]
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True
+
+
+class GroupKeyDistribution(BaseModel):
+    """Schema para distribuir clave de grupo a miembros"""
+    group_id: int
+    encrypted_keys: dict[int, str]  # {user_id: encrypted_group_key}
+

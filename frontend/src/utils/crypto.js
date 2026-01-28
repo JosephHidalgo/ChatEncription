@@ -539,6 +539,210 @@ const CryptoModule = {
             console.error('Error descifrando clave privada:', error);
             throw new Error('Contraseña incorrecta o datos corruptos');
         }
+    },
+
+    // ==================== FUNCIONES PARA GRUPOS ====================
+
+    /**
+     * Genera una clave AES para un grupo
+     * @returns {Object} { key: Uint8Array, keyHex: string, keyHash: string }
+     */
+    generateGroupKey() {
+        const key = this.generateRandomAESKey();
+        const keyHex = Array.from(key).map(b => b.toString(16).padStart(2, '0')).join('');
+        
+        // Calcular hash SHA-256
+        const keyHash = this.hashSHA256(keyHex);
+        
+        this.log('generateGroupKey', {
+            keyLength: key.length,
+            keyHex: keyHex.substring(0, 32) + '...',
+            keyHash: keyHash
+        });
+        
+        return {
+            key: key,
+            keyHex: keyHex,
+            keyHash: keyHash
+        };
+    },
+
+    /**
+     * Calcula el hash SHA-256 de un string
+     */
+    hashSHA256(text) {
+        // Implementación simple de SHA-256 usando Web Crypto API
+        const encoder = new TextEncoder();
+        const data = encoder.encode(text);
+        
+        return crypto.subtle.digest('SHA-256', data).then(hash => {
+            return Array.from(new Uint8Array(hash))
+                .map(b => b.toString(16).padStart(2, '0'))
+                .join('');
+        });
+    },
+
+    /**
+     * Encripta la clave AES del grupo con la clave pública RSA de un miembro
+     * @param {string} groupKeyHex - Clave AES en hexadecimal
+     * @param {string} publicKeyPem - Clave pública RSA en formato PEM
+     * @returns {Promise<string>} Clave encriptada en base64
+     */
+    async encryptGroupKeyForMember(groupKeyHex, publicKeyPem) {
+        try {
+            this.log('encryptGroupKeyForMember', {
+                groupKeyLength: groupKeyHex.length,
+                publicKeyPem: publicKeyPem.substring(0, 100) + '...'
+            });
+
+            // Encriptar usando RSA
+            const encrypted = await this.encryptRSA(groupKeyHex, publicKeyPem);
+            
+            this.log('encryptGroupKeyForMember - Result', {
+                encryptedLength: encrypted.length,
+                encrypted: encrypted.substring(0, 50) + '...'
+            });
+
+            return encrypted;
+        } catch (error) {
+            console.error('Error encriptando clave de grupo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Desencripta la clave AES del grupo con la clave privada RSA del usuario
+     * @param {string} encryptedGroupKey - Clave encriptada en base64
+     * @param {string} privateKeyPem - Clave privada RSA en formato PEM
+     * @returns {Promise<string>} Clave AES en hexadecimal
+     */
+    async decryptGroupKey(encryptedGroupKey, privateKeyPem) {
+        try {
+            this.log('decryptGroupKey', {
+                encryptedLength: encryptedGroupKey.length
+            });
+
+            // Desencriptar usando RSA
+            const decrypted = await this.decryptRSA(encryptedGroupKey, privateKeyPem);
+            
+            this.log('decryptGroupKey - Result', {
+                decryptedLength: decrypted.length,
+                decrypted: decrypted.substring(0, 32) + '...'
+            });
+
+            return decrypted;
+        } catch (error) {
+            console.error('Error desencriptando clave de grupo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Encripta un mensaje de grupo con la clave AES del grupo
+     * @param {string} message - Mensaje a encriptar
+     * @param {string} groupKeyHex - Clave AES en hexadecimal
+     * @returns {Promise<Object>} { encrypted_message, iv }
+     */
+    async encryptGroupMessage(message, groupKeyHex) {
+        try {
+            // Convertir hex a bytes
+            const keyBytes = new Uint8Array(
+                groupKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
+
+            // Generar IV
+            const iv = this.generateIV();
+
+            // Encriptar con AES
+            const encrypted = await this.encryptAES(message, keyBytes, iv);
+
+            this.log('encryptGroupMessage', {
+                messageLength: message.length,
+                encryptedLength: encrypted.length,
+                iv: iv
+            });
+
+            return {
+                encrypted_message: encrypted,
+                iv: iv
+            };
+        } catch (error) {
+            console.error('Error encriptando mensaje de grupo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Desencripta un mensaje de grupo con la clave AES del grupo
+     * @param {string} encryptedMessage - Mensaje encriptado en base64
+     * @param {string} iv - Vector de inicialización en base64
+     * @param {string} groupKeyHex - Clave AES en hexadecimal
+     * @returns {Promise<string>} Mensaje desencriptado
+     */
+    async decryptGroupMessage(encryptedMessage, iv, groupKeyHex) {
+        try {
+            // Convertir hex a bytes
+            const keyBytes = new Uint8Array(
+                groupKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
+            );
+
+            // Desencriptar con AES
+            const decrypted = await this.decryptAES(encryptedMessage, keyBytes, iv);
+
+            this.log('decryptGroupMessage', {
+                encryptedLength: encryptedMessage.length,
+                decryptedLength: decrypted.length
+            });
+
+            return decrypted;
+        } catch (error) {
+            console.error('Error desencriptando mensaje de grupo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Firma un mensaje de grupo con la clave privada RSA
+     * @param {string} message - Mensaje a firmar
+     * @param {string} privateKeyPem - Clave privada RSA en formato PEM
+     * @returns {Promise<string>} Firma en base64
+     */
+    async signGroupMessage(message, privateKeyPem) {
+        try {
+            const signature = await this.signMessage(message, privateKeyPem);
+            
+            this.log('signGroupMessage', {
+                messageLength: message.length,
+                signatureLength: signature.length
+            });
+
+            return signature;
+        } catch (error) {
+            console.error('Error firmando mensaje de grupo:', error);
+            throw error;
+        }
+    },
+
+    /**
+     * Verifica la firma de un mensaje de grupo
+     * @param {string} message - Mensaje original
+     * @param {string} signature - Firma en base64
+     * @param {string} publicKeyPem - Clave pública RSA del emisor
+     * @returns {Promise<boolean>} true si la firma es válida
+     */
+    async verifyGroupMessageSignature(message, signature, publicKeyPem) {
+        try {
+            const isValid = await this.verifySignature(message, signature, publicKeyPem);
+            
+            this.log('verifyGroupMessageSignature', {
+                isValid: isValid
+            });
+
+            return isValid;
+        } catch (error) {
+            console.error('Error verificando firma de grupo:', error);
+            return false;
+        }
     }
 };
 

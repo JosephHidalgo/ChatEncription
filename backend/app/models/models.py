@@ -187,4 +187,136 @@ class KeyRotationHistory(Base):
     # Información
     rotation_reason = Column(String(255), nullable=True)
     rotated_at = Column(DateTime, default=func.now())
+
+
+# ===================== GRUPOS =====================
+
+class Group(Base):
+    """
+    Modelo de grupo de chat.
+    
+    Cada grupo tiene una clave AES única compartida que se distribuye
+    encriptada con RSA a cada miembro.
+    """
+    __tablename__ = "groups"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Administrador del grupo
+    admin_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Clave AES del grupo
+    # La clave real está distribuida encriptada en GroupMember
+    group_key_hash = Column(String(64), nullable=False)  # Hash para validación
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    updated_at = Column(DateTime, default=func.now(), onupdate=func.now())
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    
+    # Relaciones
+    admin = relationship("User", foreign_keys=[admin_id])
+    members = relationship("GroupMember", back_populates="group", cascade="all, delete-orphan")
+    messages = relationship("GroupMessage", back_populates="group", cascade="all, delete-orphan")
+    invite_codes = relationship("GroupInviteCode", back_populates="group", cascade="all, delete-orphan")
+
+
+class GroupMember(Base):
+    """
+    Modelo de miembro de grupo.
+    
+    Almacena la clave AES del grupo encriptada con la clave pública RSA
+    de cada miembro individual.
+    """
+    __tablename__ = "group_members"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Referencias
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Clave AES del grupo encriptada con RSA del miembro
+    encrypted_group_key = Column(LargeBinary, nullable=False)
+    
+    # Permisos
+    is_admin = Column(Boolean, default=False)
+    can_send_messages = Column(Boolean, default=True)
+    can_add_members = Column(Boolean, default=False)
+    
+    # Timestamps
+    joined_at = Column(DateTime, default=func.now())
+    
+    # Relaciones
+    group = relationship("Group", back_populates="members")
+    user = relationship("User")
+
+
+class GroupMessage(Base):
+    """
+    Modelo de mensaje de grupo.
+    
+    Los mensajes se encriptan con la clave AES compartida del grupo.
+    Todos los miembros pueden desencriptar con la misma clave.
+    """
+    __tablename__ = "group_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Referencias
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    sender_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    
+    # Contenido cifrado con AES del grupo
+    encrypted_content = Column(Text, nullable=False)
+    iv = Column(String(255), nullable=False)  # Vector de inicialización
+    
+    # Firma digital del remitente (para autenticidad)
+    signature = Column(Text, nullable=False)
+    
+    # Metadatos
+    timestamp = Column(DateTime, default=func.now(), index=True)
+    nonce = Column(String(64), unique=True, nullable=False)
+    
+    # Relaciones
+    group = relationship("Group", back_populates="messages")
+    sender = relationship("User")
+
+
+class GroupInviteCode(Base):
+    """
+    Modelo de código de invitación para grupos.
+    
+    Permite a usuarios unirse a un grupo mediante un código único
+    generado por el administrador.
+    """
+    __tablename__ = "group_invite_codes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Referencias
+    group_id = Column(Integer, ForeignKey("groups.id"), nullable=False, index=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    
+    # Código de invitación (único y aleatorio)
+    code = Column(String(32), unique=True, nullable=False, index=True)
+    
+    # Configuración
+    max_uses = Column(Integer, nullable=True)  # None = ilimitado
+    current_uses = Column(Integer, default=0)
+    expires_at = Column(DateTime, nullable=True)  # None = no expira
+    
+    # Timestamps
+    created_at = Column(DateTime, default=func.now())
+    
+    # Estado
+    is_active = Column(Boolean, default=True)
+    
+    # Relaciones
+    group = relationship("Group", back_populates="invite_codes")
+    creator = relationship("User")
     

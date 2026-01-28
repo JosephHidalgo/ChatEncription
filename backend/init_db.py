@@ -4,7 +4,10 @@ Crea todas las tablas necesarias para el sistema de chat seguro.
 """
 import asyncio
 from app.core.database import engine, Base
-from app.models.models import User, Message, Session, AuditLog, KeyRotationHistory
+from app.models.models import (
+    User, Message, Session, AuditLog, KeyRotationHistory,
+    Group, GroupMember, GroupMessage, GroupInviteCode
+)
 from loguru import logger
 
 
@@ -23,6 +26,10 @@ async def init_database():
     logger.info("  - sessions (Sesiones JWT)")
     logger.info("  - audit_logs (Logs de auditoría)")
     logger.info("  - key_rotation_history (Historial de rotación de claves)")
+    logger.info("  - groups (Grupos de chat)")
+    logger.info("  - group_members (Miembros de grupos)")
+    logger.info("  - group_messages (Mensajes de grupo)")
+    logger.info("  - group_invite_codes (Códigos de invitación)")
     
     await engine.dispose()
 

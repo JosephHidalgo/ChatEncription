@@ -82,6 +82,62 @@
     background: rgba(255, 255, 255, 0.2);
 }
 
+/* Tabs del sidebar */
+.sidebar-tabs {
+    display: flex;
+    background: white;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.sidebar-tabs .tab {
+    flex: 1;
+    padding: 12px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: var(--text-secondary);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+}
+
+.sidebar-tabs .tab:hover {
+    background: var(--light-gray);
+}
+
+.sidebar-tabs .tab.active {
+    color: var(--whatsapp-green);
+    border-bottom-color: var(--whatsapp-green);
+    font-weight: 600;
+}
+
+.sidebar-tabs .tab i {
+    font-size: 16px;
+}
+
+/* Botones de acción para grupos */
+.group-actions {
+    padding: 10px 15px;
+    background: white;
+    border-bottom: 1px solid var(--border-color);
+    display: flex;
+    gap: 8px;
+}
+
+.group-actions .btn {
+    flex: 1;
+    padding: 8px 12px;
+    font-size: 13px;
+}
+
+.group-actions .btn i {
+    margin-right: 5px;
+}
+
 .search-box {
     padding: 15px;
     background: white;
@@ -210,6 +266,54 @@
 
 .chat-header .btn-icon:hover {
     background: rgba(255, 255, 255, 0.2);
+}
+
+/* === Estilos específicos de grupos === */
+.group-header-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.group-header-info h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.member-count {
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.9);
+}
+
+.message-sender {
+    font-size: 12px;
+    color: var(--whatsapp-green);
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    padding: 40px;
+    text-align: center;
+    color: var(--text-secondary);
+}
+
+.empty-state h2 {
+    font-size: 32px;
+    margin-bottom: 16px;
+}
+
+.empty-messages {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100%;
+    color: var(--text-secondary);
 }
 
 .messages-container {

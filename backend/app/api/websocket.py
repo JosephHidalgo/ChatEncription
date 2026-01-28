@@ -1,17 +1,13 @@
-"""
-WebSocket manager para chat en tiempo real.
-Maneja conexiones, envío de mensajes cifrados y notificaciones.
-"""
 from fastapi import WebSocket, WebSocketDisconnect, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from typing import Dict, List
+from sqlalchemy import select, and_
+from typing import Dict, List, Set
 from datetime import datetime
 import json
 import secrets
 from app.core.database import get_db
 from app.core.security import decode_token
-from app.models.models import User, Message
+from app.models.models import User, Message, GroupMember, GroupMessage
 from app.schemas.schemas import WebSocketMessage, MessageEncrypted
 from app.utils.crypto import crypto_manager
 from loguru import logger
@@ -34,6 +30,9 @@ class ConnectionManager:
         
         # Diccionario: user_id -> última actividad
         self.last_activity: Dict[int, datetime] = {}
+        
+        # Salas de grupo: group_id -> Set[user_id]
+        self.group_rooms: Dict[int, Set[int]] = {}
     
     async def connect(self, websocket: WebSocket, user_id: int):
         """
@@ -70,8 +69,61 @@ class ConnectionManager:
                 del self.active_connections[user_id]
                 if user_id in self.last_activity:
                     del self.last_activity[user_id]
+                
+                # Remover de salas de grupo
+                for group_id in list(self.group_rooms.keys()):
+                    if user_id in self.group_rooms[group_id]:
+                        self.group_rooms[group_id].discard(user_id)
+                        if not self.group_rooms[group_id]:
+                            del self.group_rooms[group_id]
         
         logger.info(f"Usuario {user_id} desconectado")
+    
+    async def join_group_room(self, group_id: int, user_id: int):
+        """
+        Une a un usuario a una sala de grupo.
+        
+        Args:
+            group_id: ID del grupo
+            user_id: ID del usuario
+        """
+        if group_id not in self.group_rooms:
+            self.group_rooms[group_id] = set()
+        
+        self.group_rooms[group_id].add(user_id)
+        logger.info(f"Usuario {user_id} unido a sala del grupo {group_id}")
+    
+    async def leave_group_room(self, group_id: int, user_id: int):
+        """
+        Remueve a un usuario de una sala de grupo.
+        
+        Args:
+            group_id: ID del grupo
+            user_id: ID del usuario
+        """
+        if group_id in self.group_rooms:
+            self.group_rooms[group_id].discard(user_id)
+            if not self.group_rooms[group_id]:
+                del self.group_rooms[group_id]
+            logger.info(f"Usuario {user_id} salió de sala del grupo {group_id}")
+    
+    async def send_to_group(self, message: dict, group_id: int, exclude_user: int = None):
+        """
+        Envía un mensaje a todos los miembros de un grupo que estén online.
+        
+        Args:
+            message: Mensaje a enviar
+            group_id: ID del grupo
+            exclude_user: ID de usuario a excluir (opcional)
+        """
+        if group_id not in self.group_rooms:
+            return
+        
+        for user_id in self.group_rooms[group_id]:
+            if exclude_user and user_id == exclude_user:
+                continue
+            
+            await self.send_personal_message(message, user_id)
     
     async def send_personal_message(self, message: dict, user_id: int):
         """
@@ -131,7 +183,6 @@ class ConnectionManager:
         return list(self.active_connections.keys())
 
 
-# Instancia global del gestor de conexiones
 manager = ConnectionManager()
 
 
@@ -213,7 +264,7 @@ async def save_encrypted_message(
             encrypted_aes_key=encrypted_data.get('encrypted_key'),
             iv=encrypted_data.get('iv'),
             signature=encrypted_data.get('signature'),
-            encrypted_data=encrypted_data_json,  # Sobre completo en JSON (incluye versión del emisor)
+            encrypted_data=encrypted_data_json,
             nonce=nonce,
             timestamp=datetime.utcnow()
         )
@@ -273,6 +324,7 @@ async def handle_websocket_message(
                 'type': 'new_message',
                 'message_id': message.id,
                 'sender_id': current_user.id,
+                'recipient_id': recipient_id,
                 'sender_username': current_user.username,
                 'encrypted_data': encrypted_data,
                 'timestamp': message.timestamp.isoformat()
@@ -329,3 +381,131 @@ async def handle_websocket_message(
             'type': 'online_users',
             'users': online_users
         })
+    
+    elif message_type == 'join_group':
+        # Unirse a sala de grupo
+        group_id = data.get('group_id')
+        
+        if group_id:
+            # Verificar que el usuario es miembro del grupo
+            result = await db.execute(
+                select(GroupMember).where(
+                    and_(
+                        GroupMember.group_id == group_id,
+                        GroupMember.user_id == current_user.id
+                    )
+                )
+            )
+            member = result.scalar_one_or_none()
+            
+            if member:
+                await manager.join_group_room(group_id, current_user.id)
+                await websocket.send_json({
+                    'type': 'joined_group',
+                    'group_id': group_id
+                })
+            else:
+                await websocket.send_json({
+                    'type': 'error',
+                    'message': 'No eres miembro de este grupo'
+                })
+    
+    elif message_type == 'leave_group':
+        # Salir de sala de grupo
+        group_id = data.get('group_id')
+        
+        if group_id:
+            await manager.leave_group_room(group_id, current_user.id)
+            await websocket.send_json({
+                'type': 'left_group',
+                'group_id': group_id
+            })
+    
+    elif message_type == 'group_message':
+        # Mensaje de grupo cifrado
+        group_id = data.get('group_id')
+        encrypted_data = data.get('encrypted_data')
+        
+        if not group_id or not encrypted_data:
+            await websocket.send_json({
+                'type': 'error',
+                'message': 'Datos de mensaje grupal incompletos'
+            })
+            return
+        
+        # Verificar que el usuario es miembro del grupo
+        result = await db.execute(
+            select(GroupMember).where(
+                and_(
+                    GroupMember.group_id == group_id,
+                    GroupMember.user_id == current_user.id
+                )
+            )
+        )
+        member = result.scalar_one_or_none()
+        
+        if not member:
+            await websocket.send_json({
+                'type': 'error',
+                'message': 'No eres miembro de este grupo'
+            })
+            return
+        
+        if not member.can_send_messages:
+            await websocket.send_json({
+                'type': 'error',
+                'message': 'No tienes permiso para enviar mensajes'
+            })
+            return
+        
+        # Guardar mensaje de grupo en BD
+        nonce = secrets.token_hex(32)
+        group_message = GroupMessage(
+            group_id=group_id,
+            sender_id=current_user.id,
+            encrypted_content=encrypted_data.get('encrypted_message'),
+            iv=encrypted_data.get('iv'),
+            signature=encrypted_data.get('signature'),
+            nonce=nonce,
+            timestamp=datetime.utcnow()
+        )
+        
+        db.add(group_message)
+        await db.commit()
+        await db.refresh(group_message)
+        
+        # Enviar a todos los miembros del grupo que estén online
+        await manager.send_to_group({
+            'type': 'new_group_message',
+            'message_id': group_message.id,
+            'group_id': group_id,
+            'sender_id': current_user.id,
+            'sender_username': current_user.username,
+            'encrypted_content': group_message.encrypted_content,
+            'iv': group_message.iv,
+            'signature': group_message.signature,
+            'timestamp': group_message.timestamp.isoformat()
+        }, group_id)
+        
+        # Confirmar al emisor
+        await websocket.send_json({
+            'type': 'group_message_sent',
+            'message_id': group_message.id,
+            'group_id': group_id,
+            'timestamp': group_message.timestamp.isoformat()
+        })
+    
+    elif message_type == 'group_typing':
+        # Notificación de escritura en grupo
+        group_id = data.get('group_id')
+        is_typing = data.get('is_typing', False)
+        
+        if group_id:
+            await manager.send_to_group({
+                'type': 'group_typing_notification',
+                'group_id': group_id,
+                'sender_id': current_user.id,
+                'sender_username': current_user.username,
+                'is_typing': is_typing
+            }, group_id, exclude_user=current_user.id)
+

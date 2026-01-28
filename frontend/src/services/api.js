@@ -155,6 +155,104 @@ const API = {
     async markAsRead(messageId) {
         const response = await api.post(`/api/messages/${messageId}/read`);
         return response.data;
+    },
+
+    // ==================== GRUPOS ====================
+
+    /**
+     * Crear grupo
+     */
+    async createGroup(groupData) {
+        const response = await api.post('/groups/', groupData);
+        return response.data;
+    },
+
+    /**
+     * Obtener mis grupos
+     */
+    async getMyGroups() {
+        const response = await api.get('/groups/');
+        return response.data;
+    },
+
+    /**
+     * Obtener detalles de un grupo
+     */
+    async getGroup(groupId) {
+        const response = await api.get(`/groups/${groupId}`);
+        return response.data;
+    },
+
+    /**
+     * Obtener miembros de un grupo
+     */
+    async getGroupMembers(groupId) {
+        const response = await api.get(`/groups/${groupId}/members`);
+        return response.data;
+    },
+
+    /**
+     * Agregar miembro a grupo (solo admin)
+     */
+    async addMemberToGroup(groupId, userId, encryptedGroupKey) {
+        const response = await api.post(`/groups/${groupId}/members`, {
+            user_id: userId,
+            encrypted_group_key: encryptedGroupKey
+        });
+        return response.data;
+    },
+
+    /**
+     * Generar código de invitación (solo admin)
+     */
+    async generateInviteCode(groupId, maxUses = null, expiresInHours = null) {
+        const response = await api.post(`/groups/${groupId}/invite-codes`, {
+            max_uses: maxUses,
+            expires_in_hours: expiresInHours
+        });
+        return response.data;
+    },
+
+    /**
+     * Unirse a grupo con código
+     */
+    async joinGroupWithCode(code, encryptedGroupKey) {
+        const response = await api.post('/groups/join', {
+            code: code,
+            encrypted_group_key: encryptedGroupKey
+        });
+        return response.data;
+    },
+
+    /**
+     * Obtener mi clave de grupo encriptada
+     */
+    async getMyEncryptedGroupKey(groupId) {
+        const response = await api.get(`/groups/${groupId}/encrypted-key`);
+        return response.data;
+    },
+
+    /**
+     * Enviar mensaje a grupo
+     */
+    async sendGroupMessage(groupId, messageData) {
+        const response = await api.post(`/groups/${groupId}/messages`, {
+            group_id: groupId,
+            ...messageData
+        });
+        return response.data;
+    },
+
+    /**
+     * Obtener mensajes de grupo
+     */
+    async getGroupMessages(groupId, limit = 50, beforeId = null) {
+        let url = `/groups/${groupId}/messages?limit=${limit}`;
+        if (beforeId) {
+            url += `&before_id=${beforeId}`;
+        }
+        const response = await api.get(url);
+        return response.data;
     }
 };
 

@@ -429,8 +429,9 @@ class AuthService:
                 detail="Usuario no encontrado"
             )
         
-        # Guardar claves antiguas para el historial
-        old_public_key = user.public_key_rsa
+        # Guardar hash de clave antigua para el historial
+        import hashlib
+        old_public_key_hash = hashlib.sha256(user.public_key_rsa.encode()).hexdigest()
         
         # Generar nuevo par de claves RSA
         private_key_pem, public_key_pem = crypto_manager.generate_rsa_key_pair()
@@ -439,11 +440,14 @@ class AuthService:
         user.public_key_rsa = public_key_pem.decode('utf-8')
         user.key_rotation_date = datetime.utcnow()
         
+        # Calcular hash de nueva clave
+        new_public_key_hash = hashlib.sha256(user.public_key_rsa.encode()).hexdigest()
+        
         # Registrar en historial de rotación
         rotation_history = KeyRotationHistory(
             user_id=user.id,
-            old_public_key=old_public_key,
-            new_public_key=user.public_key_rsa,
+            old_public_key_hash=old_public_key_hash,
+            new_public_key_hash=new_public_key_hash,
             rotation_reason=reason,
             rotated_at=datetime.utcnow()
         )
