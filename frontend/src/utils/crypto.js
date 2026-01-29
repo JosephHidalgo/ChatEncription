@@ -13,20 +13,35 @@ const CryptoModule = {
 
     arrayBufferToBase64(buffer) {
         const bytes = new Uint8Array(buffer);
-        let binary = '';
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
+
+        const CHUNK_SIZE = 0x4000;
+        const chunks = [];
+
+        for (let i = 0; i < bytes.length; i += CHUNK_SIZE) {
+            const chunk = bytes.subarray(i, Math.min(i + CHUNK_SIZE, bytes.length));
+            const chunkArray = Array.from(chunk);
+            chunks.push(String.fromCharCode(...chunkArray));
         }
+
+        const binary = chunks.join('');
         return btoa(binary);
     },
 
     base64ToArrayBuffer(base64) {
-        const binary = atob(base64);
-        const bytes = new Uint8Array(binary.length);
-        for (let i = 0; i < binary.length; i++) {
-            bytes[i] = binary.charCodeAt(i);
+        try {
+            const binary = atob(base64);
+            const bytes = new Uint8Array(binary.length);
+
+            // Usar un loop simple sin operaciones complejas
+            for (let i = 0; i < binary.length; i++) {
+                bytes[i] = binary.charCodeAt(i) & 0xFF; // Asegurar que sea un byte válido
+            }
+
+            return bytes.buffer;
+        } catch (error) {
+            console.error('Error en base64ToArrayBuffer:', error);
+            throw new Error('Error decodificando base64: ' + error.message);
         }
-        return bytes.buffer;
     },
 
     /**
@@ -35,23 +50,23 @@ const CryptoModule = {
      */
     pemToBase64(pem) {
         if (!pem) return pem;
-        
+
         this.log('pemToBase64 - Input', {
             pemLength: pem.length,
             pemStart: pem.substring(0, 50) + '...',
             hasPemHeaders: pem.includes('-----BEGIN')
         });
-        
+
         const cleaned = pem
             .replace(/-----BEGIN [A-Z ]+-----/g, '')
             .replace(/-----END [A-Z ]+-----/g, '')
             .replace(/\s/g, '');
-            
+
         this.log('pemToBase64 - Output', {
             cleanedLength: cleaned.length,
             cleanedStart: cleaned.substring(0, 50) + '...'
         });
-        
+
         return cleaned;
     },
 
@@ -83,18 +98,40 @@ const CryptoModule = {
         }
 
         try {
+            // Validar inputs
+            if (!message || typeof message !== 'string') {
+                throw new Error('Mensaje inválido para cifrado');
+            }
+
+            if (!keyBytes || keyBytes.length !== 32) {
+                throw new Error('Clave AES debe ser de 32 bytes (256 bits)');
+            }
+
+            if (!ivBase64) {
+                throw new Error('IV es requerido');
+            }
+
             const encoder = new TextEncoder();
             const data = encoder.encode(message);
 
+            // Asegurar que keyBytes es un Uint8Array válido
+            const keyArray = keyBytes instanceof Uint8Array ? keyBytes : new Uint8Array(keyBytes);
+
             const cryptoKey = await crypto.subtle.importKey(
                 'raw',
-                keyBytes,
+                keyArray,
                 { name: 'AES-CBC', length: 256 },
                 false,
                 ['encrypt']
             );
 
             const iv = this.base64ToArrayBuffer(ivBase64);
+
+            // Validar IV
+            if (iv.byteLength !== 16) {
+                throw new Error('IV debe ser de 16 bytes (128 bits)');
+            }
+
             const encrypted = await crypto.subtle.encrypt(
                 { name: 'AES-CBC', iv: iv },
                 cryptoKey,
@@ -114,15 +151,37 @@ const CryptoModule = {
         }
 
         try {
+            // Validar inputs
+            if (!encryptedBase64 || typeof encryptedBase64 !== 'string') {
+                throw new Error('Datos cifrados inválidos');
+            }
+
+            if (!keyBytes || keyBytes.length !== 32) {
+                throw new Error('Clave AES debe ser de 32 bytes (256 bits)');
+            }
+
+            if (!ivBase64) {
+                throw new Error('IV es requerido');
+            }
+
+            // Asegurar que keyBytes es un Uint8Array válido
+            const keyArray = keyBytes instanceof Uint8Array ? keyBytes : new Uint8Array(keyBytes);
+
             const cryptoKey = await crypto.subtle.importKey(
                 'raw',
-                keyBytes,
+                keyArray,
                 { name: 'AES-CBC', length: 256 },
                 false,
                 ['decrypt']
             );
 
             const iv = this.base64ToArrayBuffer(ivBase64);
+
+            // Validar IV
+            if (iv.byteLength !== 16) {
+                throw new Error('IV debe ser de 16 bytes (128 bits)');
+            }
+
             const encrypted = this.base64ToArrayBuffer(encryptedBase64);
 
             const decrypted = await crypto.subtle.decrypt(
@@ -135,6 +194,12 @@ const CryptoModule = {
             return decoder.decode(decrypted);
         } catch (error) {
             console.error('❌ Error descifrando con AES:', error);
+            console.error('   Detalles:', {
+                encryptedLength: encryptedBase64?.length,
+                keyLength: keyBytes?.length,
+                ivLength: ivBase64?.length,
+                errorMessage: error.message
+            });
             throw error;
         }
     },
@@ -183,7 +248,7 @@ const CryptoModule = {
                 publicKeyLength: publicKeyBase64?.length,
                 publicKeyStart: publicKeyBase64?.substring(0, 50) + '...'
             });
-            
+
             // Limpiar formato PEM si es necesario
             const cleanBase64 = this.pemToBase64(publicKeyBase64);
             const publicKeyBuffer = this.base64ToArrayBuffer(cleanBase64);
@@ -194,10 +259,10 @@ const CryptoModule = {
                 false,
                 ['encrypt']
             );
-            
+
             this.log('encryptRSA - Key Imported', { keyType: 'RSA-OAEP' });
 
-            const dataBuffer = typeof data === 'string' 
+            const dataBuffer = typeof data === 'string'
                 ? new TextEncoder().encode(data)
                 : data;
 
@@ -206,9 +271,9 @@ const CryptoModule = {
                 publicKey,
                 dataBuffer
             );
-            
+
             const result = this.arrayBufferToBase64(encrypted);
-            
+
             this.log('encryptRSA - Success', {
                 encryptedLength: result.length,
                 encryptedStart: result.substring(0, 50) + '...'
@@ -260,11 +325,11 @@ const CryptoModule = {
                 messageLength: message?.length,
                 hasRecipientKey: !!recipientPublicKey
             });
-            
+
             const aesKey = this.generateRandomAESKey();
             const iv = this.generateIV();
             const nonce = this.generateNonce();
-            
+
             this.log('encryptMessage - Keys Generated', {
                 aesKeyLength: aesKey.length,
                 ivLength: iv.length,
@@ -273,14 +338,14 @@ const CryptoModule = {
 
             const encryptedMessage = await this.encryptAES(message, aesKey, iv);
             const encryptedAESKey = await this.encryptRSA(aesKey, recipientPublicKey);
-            
+
             const result = {
                 encrypted_message: encryptedMessage,
                 encrypted_key: encryptedAESKey,
                 iv: iv,
                 nonce: nonce
             };
-            
+
             this.log('encryptMessage - Success', {
                 encrypted_message_length: encryptedMessage.length,
                 encrypted_key_length: encryptedAESKey.length
@@ -300,27 +365,68 @@ const CryptoModule = {
             console.log('  • Mensaje cifrado:', encryptedData?.encrypted_message?.substring(0, 50) + '...');
             console.log('  • Clave AES cifrada:', encryptedData?.encrypted_key?.substring(0, 50) + '...');
             console.log('  • IV:', encryptedData?.iv);
-            
+
+            // Validar que tenemos todos los datos necesarios
+            if (!encryptedData) {
+                throw new Error('No se recibieron datos cifrados');
+            }
+
             const { encrypted_message, encrypted_key, iv } = encryptedData;
-            
+
+            if (!encrypted_message || !encrypted_key || !iv) {
+                throw new Error('Datos cifrados incompletos: ' +
+                    JSON.stringify({
+                        hasMessage: !!encrypted_message,
+                        hasKey: !!encrypted_key,
+                        hasIV: !!iv
+                    })
+                );
+            }
+
+            if (!privateKey) {
+                throw new Error('No se proporcionó clave privada');
+            }
+
             console.log('\n🔑 Paso 1: Descifrando clave AES con RSA-OAEP...');
             console.log('  • Clave privada (longitud):', privateKey?.length, 'chars');
-            const aesKeyBuffer = await this.decryptRSA(encrypted_key, privateKey);
+
+            let aesKeyBuffer;
+            try {
+                aesKeyBuffer = await this.decryptRSA(encrypted_key, privateKey);
+            } catch (rsaError) {
+                console.error('  ❌ Error en descifrado RSA:', rsaError);
+                throw new Error('Error descifrando clave AES con RSA: ' + rsaError.message);
+            }
+
             const aesKey = new Uint8Array(aesKeyBuffer);
             console.log('  ✓ Clave AES descifrada:', aesKey.length, 'bytes');
-            
+
+            if (aesKey.length !== 32) {
+                throw new Error(`Clave AES tiene tamaño incorrecto: ${aesKey.length} bytes (esperado: 32)`);
+            }
+
             console.log('\n📝 Paso 2: Descifrando mensaje con AES-256-CBC...');
             console.log('  • Algoritmo: AES-256-CBC');
             console.log('  • Longitud clave:', aesKey.length * 8, 'bits');
-            const message = await this.decryptAES(encrypted_message, aesKey, iv);
+            console.log('  • IV length:', iv.length, 'chars');
+
+            let message;
+            try {
+                message = await this.decryptAES(encrypted_message, aesKey, iv);
+            } catch (aesError) {
+                console.error('  ❌ Error en descifrado AES:', aesError);
+                throw new Error('Error descifrando mensaje con AES: ' + aesError.message);
+            }
+
             console.log('  ✓ Mensaje descifrado:', message.substring(0, 100));
-            
+
             console.log('\n✅ Desencriptación completada exitosamente');
             console.groupEnd();
-            
+
             return message;
         } catch (error) {
             console.error('❌ Error en descifrado:', error);
+            console.error('   Stack:', error.stack);
             console.groupEnd();
             throw error;
         }
@@ -545,21 +651,21 @@ const CryptoModule = {
 
     /**
      * Genera una clave AES para un grupo
-     * @returns {Object} { key: Uint8Array, keyHex: string, keyHash: string }
+     * @returns {Promise<Object>} { key: Uint8Array, keyHex: string, keyHash: string }
      */
-    generateGroupKey() {
+    async generateGroupKey() {
         const key = this.generateRandomAESKey();
         const keyHex = Array.from(key).map(b => b.toString(16).padStart(2, '0')).join('');
-        
+
         // Calcular hash SHA-256
-        const keyHash = this.hashSHA256(keyHex);
-        
+        const keyHash = await this.hashSHA256(keyHex);
+
         this.log('generateGroupKey', {
             keyLength: key.length,
             keyHex: keyHex.substring(0, 32) + '...',
             keyHash: keyHash
         });
-        
+
         return {
             key: key,
             keyHex: keyHex,
@@ -570,16 +676,15 @@ const CryptoModule = {
     /**
      * Calcula el hash SHA-256 de un string
      */
-    hashSHA256(text) {
+    async hashSHA256(text) {
         // Implementación simple de SHA-256 usando Web Crypto API
         const encoder = new TextEncoder();
         const data = encoder.encode(text);
-        
-        return crypto.subtle.digest('SHA-256', data).then(hash => {
-            return Array.from(new Uint8Array(hash))
-                .map(b => b.toString(16).padStart(2, '0'))
-                .join('');
-        });
+
+        const hash = await crypto.subtle.digest('SHA-256', data);
+        return Array.from(new Uint8Array(hash))
+            .map(b => b.toString(16).padStart(2, '0'))
+            .join('');
     },
 
     /**
@@ -597,7 +702,7 @@ const CryptoModule = {
 
             // Encriptar usando RSA
             const encrypted = await this.encryptRSA(groupKeyHex, publicKeyPem);
-            
+
             this.log('encryptGroupKeyForMember - Result', {
                 encryptedLength: encrypted.length,
                 encrypted: encrypted.substring(0, 50) + '...'
@@ -624,7 +729,7 @@ const CryptoModule = {
 
             // Desencriptar usando RSA
             const decrypted = await this.decryptRSA(encryptedGroupKey, privateKeyPem);
-            
+
             this.log('decryptGroupKey - Result', {
                 decryptedLength: decrypted.length,
                 decrypted: decrypted.substring(0, 32) + '...'
@@ -638,6 +743,26 @@ const CryptoModule = {
     },
 
     /**
+     * Convierte string hexadecimal a Uint8Array de forma segura para móviles
+     */
+    hexToBytes(hex) {
+        if (!hex || hex.length % 2 !== 0) {
+            throw new Error('Hex string inválido');
+        }
+
+        const bytes = new Uint8Array(hex.length / 2);
+        for (let i = 0; i < hex.length; i += 2) {
+            // Usar parseInt con base 16 de forma explícita y segura
+            const byte = parseInt(hex.substr(i, 2), 16);
+            if (isNaN(byte)) {
+                throw new Error(`Byte inválido en posición ${i}: ${hex.substr(i, 2)}`);
+            }
+            bytes[i / 2] = byte;
+        }
+        return bytes;
+    },
+
+    /**
      * Encripta un mensaje de grupo con la clave AES del grupo
      * @param {string} message - Mensaje a encriptar
      * @param {string} groupKeyHex - Clave AES en hexadecimal
@@ -645,10 +770,8 @@ const CryptoModule = {
      */
     async encryptGroupMessage(message, groupKeyHex) {
         try {
-            // Convertir hex a bytes
-            const keyBytes = new Uint8Array(
-                groupKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
-            );
+            // Convertir hex a bytes usando método seguro para móviles
+            const keyBytes = this.hexToBytes(groupKeyHex);
 
             // Generar IV
             const iv = this.generateIV();
@@ -681,10 +804,8 @@ const CryptoModule = {
      */
     async decryptGroupMessage(encryptedMessage, iv, groupKeyHex) {
         try {
-            // Convertir hex a bytes
-            const keyBytes = new Uint8Array(
-                groupKeyHex.match(/.{1,2}/g).map(byte => parseInt(byte, 16))
-            );
+            // Convertir hex a bytes usando método seguro para móviles
+            const keyBytes = this.hexToBytes(groupKeyHex);
 
             // Desencriptar con AES
             const decrypted = await this.decryptAES(encryptedMessage, keyBytes, iv);
@@ -710,7 +831,7 @@ const CryptoModule = {
     async signGroupMessage(message, privateKeyPem) {
         try {
             const signature = await this.signMessage(message, privateKeyPem);
-            
+
             this.log('signGroupMessage', {
                 messageLength: message.length,
                 signatureLength: signature.length
@@ -733,7 +854,7 @@ const CryptoModule = {
     async verifyGroupMessageSignature(message, signature, publicKeyPem) {
         try {
             const isValid = await this.verifySignature(message, signature, publicKeyPem);
-            
+
             this.log('verifyGroupMessageSignature', {
                 isValid: isValid
             });

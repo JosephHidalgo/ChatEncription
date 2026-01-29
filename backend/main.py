@@ -46,12 +46,26 @@ app = FastAPI(
 )
 
 # Configurar CORS para permitir acceso desde red local
+# En desarrollo, permite tanto HTTP como HTTPS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Permite cualquier origen en desarrollo
+    allow_origins=[
+        # Localhost
+        "http://localhost:5173",
+        "https://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://127.0.0.1:5173",
+        "http://10.236.150.102:5173",
+        "https://10.236.150.102:5173",
+        # Permite cualquier IP de red local (10.x.x.x)
+        "http://10.*.*.*:5173",
+        "https://10.*.*.*:5173",
+        
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["*"],
 )
 
 # Incluir routers

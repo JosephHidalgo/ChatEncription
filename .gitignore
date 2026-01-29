@@ -44,3 +44,6 @@ view_audit.py
 setup.ps1
 setup.sh
 *.sql
+
+*.ps1
+*.sh
