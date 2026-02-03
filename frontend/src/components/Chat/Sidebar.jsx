@@ -77,7 +77,7 @@ const Sidebar = ({
             const otherUsers = usersList.filter(u => u.id !== user.id);
             setUsers(otherUsers);
         } catch (error) {
-            console.error('Error cargando usuarios:', error);
+            // console.error('Error cargando usuarios:', error);
         } finally {
             setLoading(false);
         }
@@ -88,7 +88,7 @@ const Sidebar = ({
             const groupsList = await API.getMyGroups();
             setGroups(groupsList);
         } catch (error) {
-            console.error('Error cargando grupos:', error);
+            // console.error('Error cargando grupos:', error);
         }
     };
 
@@ -104,10 +104,10 @@ const Sidebar = ({
         g.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
-    // Combinar usuarios y grupos en una sola lista (usuarios primero)
+    // Combinar usuarios y grupos en una sola lista (grupos primero)
     const allChats = [
-        ...filteredUsers.map(u => ({ ...u, type: 'user' })),
-        ...filteredGroups.map(g => ({ ...g, type: 'group' }))
+        ...filteredGroups.map(g => ({ ...g, type: 'group' })),
+        ...filteredUsers.map(u => ({ ...u, type: 'user' }))
     ];
 
     const getAvatarGradient = (userId) => {

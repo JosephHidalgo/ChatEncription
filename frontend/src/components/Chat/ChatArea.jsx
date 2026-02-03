@@ -13,9 +13,9 @@ const ChatArea = ({
     onBack,
     onShowGroupDetails
 }) => {
-    console.log('🎨 [ChatArea] Componente renderizado', { selectedChat, chatType });
-    console.log('   selectedChat ID:', selectedChat?.id);
-    console.log('   chatType:', chatType);
+    // console.log('🎨 [ChatArea] Componente renderizado', { selectedChat, chatType });
+    // console.log('   selectedChat ID:', selectedChat?.id);
+    // console.log('   chatType:', chatType);
 
     const { user, privateKey } = useAuth();
     const [messages, setMessages] = useState([]);
@@ -38,7 +38,7 @@ const ChatArea = ({
 
     // Actualizar refs cuando cambien los valores
     useEffect(() => {
-        console.log('📍 [ChatArea] useEffect de refs ejecutado');
+        // console.log('📍 [ChatArea] useEffect de refs ejecutado');
         selectedChatRef.current = selectedChat;
         chatTypeRef.current = chatType;
     }, [selectedChat, chatType]);
@@ -62,12 +62,12 @@ const ChatArea = ({
     }, [activeChat, chatType]);
 
     useEffect(() => {
-        console.log('🔄 [ChatArea] useEffect de listeners ejecutado');
-        console.log('   chatType:', chatType);
-        console.log('   selectedChat:', selectedChat);
+        // console.log('🔄 [ChatArea] useEffect de listeners ejecutado');
+        // console.log('   chatType:', chatType);
+        // console.log('   selectedChat:', selectedChat);
 
         if (!chatType || !selectedChat) {
-            console.log('   ⚠️ No hay chat seleccionado, saltando configuración de listeners');
+            // console.log('   ⚠️ No hay chat seleccionado, saltando configuración de listeners');
             return;
         }
 
@@ -75,14 +75,14 @@ const ChatArea = ({
         // Los handlers usarán refs para acceder a los valores actualizados
 
         if (chatType === 'user') {
-            console.log('   → Configurando listeners de usuario');
-            console.log('   Usuario actual (yo):', user.id, user.username);
+            // console.log('   → Configurando listeners de usuario');
+            // console.log('   Usuario actual (yo):', user.id, user.username);
 
             const handleNewMessage = (data) => {
-                console.log('📨 [ChatArea] Mensaje privado recibido:', data);
+                // console.log('📨 [ChatArea] Mensaje privado recibido:', data);
                 const currentSelectedUser = selectedChatRef.current;
-                console.log('   Usuario seleccionado:', currentSelectedUser?.id, currentSelectedUser?.username);
-                console.log('   Yo:', user.id);
+                // console.log('   Usuario seleccionado:', currentSelectedUser?.id, currentSelectedUser?.username);
+                // console.log('   Yo:', user.id);
 
                 // Verificar si el mensaje es de/para el usuario seleccionado
                 const isFromSelected = data.sender_id === currentSelectedUser?.id;
@@ -90,32 +90,32 @@ const ChatArea = ({
                 const isFromMe = data.sender_id === user.id;
                 const isToMe = data.recipient_id === user.id;
 
-                console.log('   isFromSelected:', isFromSelected);
-                console.log('   isToSelected:', isToSelected);
-                console.log('   isFromMe:', isFromMe);
-                console.log('   isToMe:', isToMe);
+                // console.log('   isFromSelected:', isFromSelected);
+                // console.log('   isToSelected:', isToSelected);
+                // console.log('   isFromMe:', isFromMe);
+                // console.log('   isToMe:', isToMe);
 
                 // Mostrar el mensaje si es una conversación con el usuario seleccionado
                 if ((isFromSelected && isToMe) || (isFromMe && isToSelected)) {
-                    console.log('✓ Mensaje es parte de esta conversación, procesando...');
+                    // console.log('✓ Mensaje es parte de esta conversación, procesando...');
                     decryptAndAddUserMessage(data);
                 } else {
-                    console.log('⚠️ Mensaje NO es parte de esta conversación, ignorando');
+                    // console.log('⚠️ Mensaje NO es parte de esta conversación, ignorando');
                 }
             };
 
             const handleTyping = (data) => {
-                console.log('⌨️ [ChatArea] Notificación de typing recibida:', data);
+                // console.log('⌨️ [ChatArea] Notificación de typing recibida:', data);
                 const currentUser = selectedChatRef.current;
-                console.log('   Usuario seleccionado:', currentUser?.id);
-                console.log('   Sender ID:', data.sender_id);
+                // console.log('   Usuario seleccionado:', currentUser?.id);
+                // console.log('   Sender ID:', data.sender_id);
                 
                 if (data.sender_id === currentUser?.id) {
-                    console.log('✓ Mostrando indicador de typing');
+                    // console.log('✓ Mostrando indicador de typing');
                     setTypingUser(data.sender_username);
                     setTimeout(() => setTypingUser(null), 3000);
                 } else {
-                    console.log('⚠️ Typing de otro usuario, ignorando');
+                    // console.log('⚠️ Typing de otro usuario, ignorando');
                 }
             };
 
@@ -123,29 +123,29 @@ const ChatArea = ({
             wsService.on('typing', handleTyping);
 
             return () => {
-                console.log('🧹 [ChatArea] Limpiando listeners de usuario');
+                // console.log('🧹 [ChatArea] Limpiando listeners de usuario');
                 wsService.off('message', handleNewMessage);
                 wsService.off('typing', handleTyping);
             };
 
         } else if (chatType === 'group') {
-            console.log('   → Configurando listeners de grupo');
-            console.log('   Grupo ID:', selectedChat.id);
+            // console.log('   → Configurando listeners de grupo');
+            // console.log('   Grupo ID:', selectedChat.id);
 
             const handleGroupMessage = (data) => {
-                console.log('🔔 Listener de grupo activado. Data:', data);
+                // console.log('🔔 Listener de grupo activado. Data:', data);
                 const currentGroup = selectedChatRef.current;
                 const currentChatType = chatTypeRef.current;
 
-                console.log('   Grupo del mensaje:', data.group_id);
-                console.log('   Grupo seleccionado (ref):', currentGroup?.id);
-                console.log('   Tipo de chat (ref):', currentChatType);
+                // console.log('   Grupo del mensaje:', data.group_id);
+                // console.log('   Grupo seleccionado (ref):', currentGroup?.id);
+                // console.log('   Tipo de chat (ref):', currentChatType);
 
                 if (currentChatType === 'group' && data.group_id === currentGroup?.id) {
-                    console.log('✓ El mensaje es para este grupo, procesando...');
+                    // console.log('✓ El mensaje es para este grupo, procesando...');
                     decryptAndAddGroupMessage(data);
                 } else {
-                    console.log('⚠️ El mensaje NO es para este grupo, ignorando');
+                    // console.log('⚠️ El mensaje NO es para este grupo, ignorando');
                 }
             };
 
@@ -159,15 +159,15 @@ const ChatArea = ({
                 }
             };
 
-            console.log('   📝 Registrando listeners...');
-            console.log('   wsService:', wsService);
-            console.log('   wsService.on:', typeof wsService.on);
+            // console.log('   📝 Registrando listeners...');
+            // console.log('   wsService:', wsService);
+            // console.log('   wsService.on:', typeof wsService.on);
             wsService.on('group_message', handleGroupMessage);
             wsService.on('group_typing', handleGroupTyping);
-            console.log('   ✅ Listeners registrados');
+            // console.log('   ✅ Listeners registrados');
 
             return () => {
-                console.log('🧹 [ChatArea] Limpiando listeners de grupo');
+                // console.log('🧹 [ChatArea] Limpiando listeners de grupo');
                 wsService.off('group_message', handleGroupMessage);
                 wsService.off('group_typing', handleGroupTyping);
             };
@@ -197,7 +197,7 @@ const ChatArea = ({
                 await loadGroupMessages();
             }
         } catch (error) {
-            console.error('Error cargando mensajes:', error);
+            // console.error('Error cargando mensajes:', error);
         } finally {
             setLoading(false);
         }
@@ -237,7 +237,7 @@ const ChatArea = ({
                         created_at: msg.timestamp
                     };
                 } catch (error) {
-                    console.error('Error descifrando mensaje:', error);
+                    // console.error('Error descifrando mensaje:', error);
                     return {
                         ...msg,
                         text: '[Error descifrando mensaje]',
@@ -255,17 +255,17 @@ const ChatArea = ({
 
         // Obtener la clave del grupo desde localStorage
         const storageKey = CONFIG.STORAGE_KEYS.GROUP_KEY_PREFIX + selectedGroup.id;
-        console.log('🔍 Cargando mensajes del grupo. Buscando clave con key:', storageKey);
+        // console.log('🔍 Cargando mensajes del grupo. Buscando clave con key:', storageKey);
 
         let groupKeyHex = localStorage.getItem(storageKey);
-        console.log('🔑 Clave encontrada en localStorage:', groupKeyHex ? (groupKeyHex.substring(0, 32) + '...') : 'NO ENCONTRADA');
+        // console.log('🔑 Clave encontrada en localStorage:', groupKeyHex ? (groupKeyHex.substring(0, 32) + '...') : 'NO ENCONTRADA');
 
         // Si no está en localStorage, obtenerla del servidor
         if (!groupKeyHex) {
-            console.log('📡 Obteniendo clave del grupo desde el servidor...');
+            // console.log('📡 Obteniendo clave del grupo desde el servidor...');
             try {
                 const encryptedKeyData = await API.getMyEncryptedGroupKey(selectedGroup.id);
-                console.log('✓ Clave encriptada recibida del servidor');
+                // console.log('✓ Clave encriptada recibida del servidor');
 
                 // Desencriptar la clave del grupo con nuestra clave privada RSA
                 const decryptedKeyBuffer = await CryptoModule.decryptRSA(
@@ -277,13 +277,13 @@ const ChatArea = ({
                 const decoder = new TextDecoder();
                 groupKeyHex = decoder.decode(decryptedKeyBuffer);
 
-                console.log('✓ Clave del grupo descifrada:', groupKeyHex.substring(0, 32) + '...');
+                // console.log('✓ Clave del grupo descifrada:', groupKeyHex.substring(0, 32) + '...');
 
                 // Guardar en localStorage para futuras sesiones
                 localStorage.setItem(storageKey, groupKeyHex);
-                console.log('✓ Clave guardada en localStorage');
+                // console.log('✓ Clave guardada en localStorage');
             } catch (error) {
-                console.error('❌ Error obteniendo/descifrando clave del grupo:', error);
+                // console.error('❌ Error obteniendo/descifrando clave del grupo:', error);
                 setMessages([]);
                 return;
             }
@@ -305,7 +305,7 @@ const ChatArea = ({
                         isMine: msg.sender_id === user.id
                     };
                 } catch (error) {
-                    console.error('Error descifrando mensaje grupal:', error);
+                    // console.error('Error descifrando mensaje grupal:', error);
                     return {
                         ...msg,
                         text: '[Error descifrando mensaje]',
@@ -343,33 +343,33 @@ const ChatArea = ({
 
             setMessages((prev) => [...prev, newMessage]);
         } catch (error) {
-            console.error('Error descifrando nuevo mensaje:', error);
+            // console.error('Error descifrando nuevo mensaje:', error);
         }
     };
 
     const decryptAndAddGroupMessage = async (data) => {
-        console.group('📨 PROCESANDO MENSAJE GRUPAL RECIBIDO');
-        console.log('Data recibida:', data);
-        console.log('Grupo actual:', selectedGroup?.id);
-        console.log('¿Coincide con grupo actual?:', data.group_id === selectedGroup?.id);
+        // console.group('📨 PROCESANDO MENSAJE GRUPAL RECIBIDO');
+        // console.log('Data recibida:', data);
+        // console.log('Grupo actual:', selectedGroup?.id);
+        // console.log('¿Coincide con grupo actual?:', data.group_id === selectedGroup?.id);
 
         // Verificar que el mensaje tenga los datos necesarios
         if (!data.encrypted_content || !data.iv) {
-            console.warn('⚠️ Mensaje sin encrypted_content o iv, ignorando');
-            console.log('   encrypted_content:', data.encrypted_content);
-            console.log('   iv:', data.iv);
-            console.groupEnd();
+            // console.warn('⚠️ Mensaje sin encrypted_content o iv, ignorando');
+            // console.log('   encrypted_content:', data.encrypted_content);
+            // console.log('   iv:', data.iv);
+            // console.groupEnd();
             return;
         }
 
         try {
             const storageKey = CONFIG.STORAGE_KEYS.GROUP_KEY_PREFIX + selectedGroup.id;
             let groupKeyHex = localStorage.getItem(storageKey);
-            console.log('🔑 Clave del grupo:', groupKeyHex ? 'ENCONTRADA' : 'NO ENCONTRADA');
+            // console.log('🔑 Clave del grupo:', groupKeyHex ? 'ENCONTRADA' : 'NO ENCONTRADA');
 
             // Si no está en localStorage, obtenerla del servidor
             if (!groupKeyHex) {
-                console.log('📡 Obteniendo clave del grupo desde el servidor para mensaje en tiempo real...');
+                // console.log('📡 Obteniendo clave del grupo desde el servidor para mensaje en tiempo real...');
                 try {
                     const encryptedKeyData = await API.getMyEncryptedGroupKey(selectedGroup.id);
                     const decryptedKeyBuffer = await CryptoModule.decryptRSA(
@@ -379,21 +379,21 @@ const ChatArea = ({
                     const decoder = new TextDecoder();
                     groupKeyHex = decoder.decode(decryptedKeyBuffer);
                     localStorage.setItem(storageKey, groupKeyHex);
-                    console.log('✓ Clave del grupo obtenida y guardada');
+                    // console.log('✓ Clave del grupo obtenida y guardada');
                 } catch (error) {
-                    console.error('❌ Error obteniendo clave del grupo:', error);
-                    console.groupEnd();
+                    // console.error('❌ Error obteniendo clave del grupo:', error);
+                    // console.groupEnd();
                     return;
                 }
             }
 
-            console.log('🔓 Descifrando mensaje...');
+            // console.log('🔓 Descifrando mensaje...');
             const decryptedText = await CryptoModule.decryptGroupMessage(
                 data.encrypted_content,
                 data.iv,
                 groupKeyHex
             );
-            console.log('✓ Mensaje descifrado:', decryptedText);
+            // console.log('✓ Mensaje descifrado:', decryptedText);
 
             const newMessage = {
                 id: data.message_id,
@@ -405,18 +405,18 @@ const ChatArea = ({
                 isMine: data.sender_id === user.id
             };
 
-            console.log('➕ Agregando mensaje al estado');
+            // console.log('➕ Agregando mensaje al estado');
             setMessages((prev) => {
-                console.log('Mensajes anteriores:', prev.length);
+                // console.log('Mensajes anteriores:', prev.length);
                 const updated = [...prev, newMessage];
-                console.log('Mensajes actualizados:', updated.length);
+                // console.log('Mensajes actualizados:', updated.length);
                 return updated;
             });
-            console.log('✅ Mensaje agregado exitosamente');
-            console.groupEnd();
+            // console.log('✅ Mensaje agregado exitosamente');
+            // console.groupEnd();
         } catch (error) {
-            console.error('❌ Error descifrando mensaje grupal:', error);
-            console.groupEnd();
+            // console.error('❌ Error descifrando mensaje grupal:', error);
+            // console.groupEnd();
         }
     };
 
@@ -436,7 +436,7 @@ const ChatArea = ({
 
             setMessageText('');
         } catch (error) {
-            console.error('Error enviando mensaje:', error);
+            // console.error('Error enviando mensaje:', error);
             alert('Error al enviar el mensaje. Por favor intenta nuevamente.');
         } finally {
             setSending(false);
@@ -444,40 +444,40 @@ const ChatArea = ({
     };
 
     const sendUserMessage = async () => {
-        console.group('📤 ENVIANDO MENSAJE A USUARIO');
-        console.log('Destinatario:', selectedUser.username, '(ID:', selectedUser.id, ')');
-        console.log('Mensaje original:', messageText);
+        // console.group('📤 ENVIANDO MENSAJE A USUARIO');
+        // console.log('Destinatario:', selectedUser.username, '(ID:', selectedUser.id, ')');
+        // console.log('Mensaje original:', messageText);
 
         // Obtener clave pública del destinatario
-        console.log('\n🔑 Obteniendo clave pública del destinatario...');
+        // console.log('\n🔑 Obteniendo clave pública del destinatario...');
         const recipientKeyData = await API.getUserPublicKey(selectedUser.id);
-        console.log('✓ Clave pública obtenida:', recipientKeyData.public_key_rsa.substring(0, 50) + '...');
+        // console.log('✓ Clave pública obtenida:', recipientKeyData.public_key_rsa.substring(0, 50) + '...');
 
         // Cifrar mensaje PARA EL RECEPTOR
-        console.log('\n🔐 [1/2] Cifrando mensaje para el receptor...');
+        // console.log('\n🔐 [1/2] Cifrando mensaje para el receptor...');
         const encryptedForRecipient = await CryptoModule.encryptMessage(
             messageText,
             recipientKeyData.public_key_rsa
         );
-        console.log('✓ Mensaje cifrado para receptor:', encryptedForRecipient.encrypted_message.substring(0, 30) + '...');
+        // console.log('✓ Mensaje cifrado para receptor:', encryptedForRecipient.encrypted_message.substring(0, 30) + '...');
 
-        console.log('\n🔐 [2/2] Cifrando mensaje para mí mismo...');
+        // console.log('\n🔐 [2/2] Cifrando mensaje para mí mismo...');
         const myPublicKey = user.public_key_rsa;
         const encryptedForSender = await CryptoModule.encryptMessage(
             messageText,
             myPublicKey
         );
-        console.log('✓ Mensaje cifrado para mí:', encryptedForSender.encrypted_message.substring(0, 30) + '...');
+        // console.log('✓ Mensaje cifrado para mí:', encryptedForSender.encrypted_message.substring(0, 30) + '...');
 
         // Firmar mensaje con clave privada del emisor
-        console.log('\n✍️ Firmando mensaje con RSA-PSS...');
+        // console.log('\n✍️ Firmando mensaje con RSA-PSS...');
         const privateKeyPem = localStorage.getItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY);
         if (!privateKeyPem) {
             throw new Error('No se encontró la clave privada para firmar el mensaje');
         }
 
         const signature = await CryptoModule.signMessage(messageText, privateKeyPem);
-        console.log('✓ Firma digital:', signature.substring(0, 50) + '...');
+        // console.log('✓ Firma digital:', signature.substring(0, 50) + '...');
 
         // Preparar payload para WebSocket con AMBAS versiones cifradas
         const wsPayload = {
@@ -495,12 +495,12 @@ const ChatArea = ({
             }
         };
 
-        console.log('\n📡 Enviando por WebSocket...');
+        // console.log('\n📡 Enviando por WebSocket...');
         wsService.send(wsPayload);
-        console.log('✓ Mensaje enviado');
+        // console.log('✓ Mensaje enviado');
 
         // Agregar el mensaje localmente para el emisor
-        console.log('\n➕ Agregando mensaje localmente...');
+        // console.log('\n➕ Agregando mensaje localmente...');
         const newMessage = {
             id: Date.now(), // ID temporal hasta que llegue la confirmación
             sender_id: user.id,
@@ -510,29 +510,29 @@ const ChatArea = ({
             timestamp: new Date().toISOString()
         };
         setMessages((prev) => [...prev, newMessage]);
-        console.log('✓ Mensaje agregado al chat');
+        // console.log('✓ Mensaje agregado al chat');
 
-        console.groupEnd();
+        // console.groupEnd();
     };
 
     const sendGroupMessage = async () => {
-        console.group('📤 ENVIANDO MENSAJE A GRUPO');
-        console.log('Grupo:', selectedGroup.name, '(ID:', selectedGroup.id, ')');
-        console.log('Mensaje original:', messageText);
+        // console.group('📤 ENVIANDO MENSAJE A GRUPO');
+        // console.log('Grupo:', selectedGroup.name, '(ID:', selectedGroup.id, ')');
+        // console.log('Mensaje original:', messageText);
 
         // Obtener clave del grupo
         const storageKey = CONFIG.STORAGE_KEYS.GROUP_KEY_PREFIX + selectedGroup.id;
-        console.log('🔍 Buscando clave con key:', storageKey);
+        // console.log('🔍 Buscando clave con key:', storageKey);
 
         let groupKeyHex = localStorage.getItem(storageKey);
-        console.log('🔑 Clave encontrada en localStorage:', groupKeyHex ? (groupKeyHex.substring(0, 32) + '...') : 'NO ENCONTRADA');
+        // console.log('🔑 Clave encontrada en localStorage:', groupKeyHex ? (groupKeyHex.substring(0, 32) + '...') : 'NO ENCONTRADA');
 
         // Si no está en localStorage, obtenerla del servidor
         if (!groupKeyHex) {
-            console.log('📡 Obteniendo clave del grupo desde el servidor...');
+            // console.log('📡 Obteniendo clave del grupo desde el servidor...');
             try {
                 const encryptedKeyData = await API.getMyEncryptedGroupKey(selectedGroup.id);
-                console.log('✓ Clave encriptada recibida del servidor');
+                // console.log('✓ Clave encriptada recibida del servidor');
 
                 // Desencriptar la clave del grupo con nuestra clave privada RSA
                 const decryptedKeyBuffer = await CryptoModule.decryptRSA(
@@ -544,39 +544,39 @@ const ChatArea = ({
                 const decoder = new TextDecoder();
                 groupKeyHex = decoder.decode(decryptedKeyBuffer);
 
-                console.log('✓ Clave del grupo descifrada:', groupKeyHex.substring(0, 32) + '...');
+                // console.log('✓ Clave del grupo descifrada:', groupKeyHex.substring(0, 32) + '...');
 
                 // Guardar en localStorage para futuras sesiones
                 localStorage.setItem(storageKey, groupKeyHex);
-                console.log('✓ Clave guardada en localStorage');
+                // console.log('✓ Clave guardada en localStorage');
             } catch (error) {
-                console.error('❌ Error obteniendo/descifrando clave del grupo:', error);
-                console.groupEnd();
+                // console.error('❌ Error obteniendo/descifrando clave del grupo:', error);
+                // console.groupEnd();
                 throw new Error('No se pudo obtener la clave del grupo');
             }
         }
 
         // Cifrar mensaje con la clave AES del grupo
-        console.log('\n🔐 Cifrando mensaje con clave del grupo...');
+        // console.log('\n🔐 Cifrando mensaje con clave del grupo...');
         const { encrypted_message, iv } = await CryptoModule.encryptGroupMessage(
             messageText,
             groupKeyHex
         );
-        console.log('✓ Mensaje cifrado:', encrypted_message.substring(0, 30) + '...');
+        // console.log('✓ Mensaje cifrado:', encrypted_message.substring(0, 30) + '...');
 
         // Firmar mensaje
-        console.log('\n✍️ Firmando mensaje...');
+        // console.log('\n✍️ Firmando mensaje...');
         const signature = await CryptoModule.signGroupMessage(
             messageText,
             privateKey
         );
-        console.log('✓ Firma generada');
+        // console.log('✓ Firma generada');
 
         // Enviar por WebSocket
-        console.log('\n📡 Enviando por WebSocket...');
+        // console.log('\n📡 Enviando por WebSocket...');
         wsService.sendGroupMessage(selectedGroup.id, encrypted_message, iv, signature);
-        console.log('✓ Mensaje enviado al grupo');
-        console.groupEnd();
+        // console.log('✓ Mensaje enviado al grupo');
+        // console.groupEnd();
     };
 
     const handleTyping = () => {
@@ -658,7 +658,7 @@ const ChatArea = ({
         return (
             <div className="chat-area empty">
                 <div className="empty-state">
-                    <h2>👋 ¡Bienvenido!</h2>
+                    <h2>¡Bienvenido!</h2>
                     <p>
                         {chatType === 'group'
                             ? 'Selecciona un grupo para comenzar a chatear'

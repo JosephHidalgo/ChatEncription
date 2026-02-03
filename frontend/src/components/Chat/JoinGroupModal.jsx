@@ -39,13 +39,13 @@ const JoinGroupModal = ({ isOpen, onClose, onGroupJoined, currentUser }) => {
 
             const joinedGroup = await API.joinGroupWithCode(inviteCode, encryptedGroupKey);
 
-            console.log('✅ Te uniste al grupo:', joinedGroup);
+            // console.log('✅ Te uniste al grupo:', joinedGroup);
 
             onGroupJoined(joinedGroup);
             onClose();
             setInviteCode('');
         } catch (error) {
-            console.error('Error uniéndose al grupo:', error);
+            // console.error('Error uniéndose al grupo:', error);
             setError(error.response?.data?.detail || 'Código inválido o expirado');
         } finally {
             setLoading(false);

@@ -29,7 +29,7 @@ export const AuthProvider = ({ children }) => {
                     // Conectar WebSocket
                     wsService.connect(token);
                 } catch (error) {
-                    console.error('Error verificando sesión:', error);
+                    // console.error('Error verificando sesión:', error);
                     logout();
                 }
             }
@@ -56,26 +56,26 @@ export const AuthProvider = ({ children }) => {
             localStorage.setItem(CONFIG.STORAGE_KEYS.PUBLIC_KEY, keyPair.publicKey);
             setPrivateKey(keyPair.privateKey);
             
-            console.log('✓ Claves RSA generadas y guardadas localmente');
+            // console.log('✓ Claves RSA generadas y guardadas localmente');
             
             // Registrar usuario con clave pública Y clave privada cifrada (backup)
             await API.register(username, email, password, keyPair.publicKey, encryptedPrivateKey);
             
-            console.log('✓ Usuario registrado exitosamente');
+            // console.log('✓ Usuario registrado exitosamente');
             
             // Hacer login automático
-            console.log('Haciendo login automático...');
+            // console.log('Haciendo login automático...');
             const loginResult = await login(username, password);
             
             if (loginResult.success) {
-                console.log('✓ Login automático exitoso');
+                // console.log('✓ Login automático exitoso');
             } else {
-                console.error('✗ Error en login automático:', loginResult.error);
+                // console.error('✗ Error en login automático:', loginResult.error);
             }
             
             return loginResult;
         } catch (error) {
-            console.error('Error en registro:', error);
+            // console.error('Error en registro:', error);
             // Limpiar claves si el registro falla
             localStorage.removeItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY);
             localStorage.removeItem(CONFIG.STORAGE_KEYS.PUBLIC_KEY);
@@ -109,7 +109,7 @@ export const AuthProvider = ({ children }) => {
             
             // Si no está en localStorage, intentar obtenerla del servidor
             if (!privateKey || privateKey === 'undefined' || privateKey === 'null') {
-                console.log('Clave privada no encontrada localmente, intentando obtener del servidor...');
+                // console.log('Clave privada no encontrada localmente, intentando obtener del servidor...');
                 try {
                     const privateKeyData = await API.getMyPrivateKey();
                     const serverPrivateKey = privateKeyData?.private_key_rsa || privateKeyData?.private_key;
@@ -120,7 +120,7 @@ export const AuthProvider = ({ children }) => {
                             // Clave legacy sin cifrar
                             privateKey = serverPrivateKey;
                             localStorage.setItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY, privateKey);
-                            console.log('✓ Clave privada legacy recuperada del servidor');
+                            // console.log('✓ Clave privada legacy recuperada del servidor');
                         } else {
                             // Clave cifrada con contraseña, intentar descifrar
                             try {
@@ -130,24 +130,24 @@ export const AuthProvider = ({ children }) => {
                                 );
                                 // Guardar en localStorage para uso futuro
                                 localStorage.setItem(CONFIG.STORAGE_KEYS.PRIVATE_KEY, privateKey);
-                                console.log('✓ Clave privada recuperada y descifrada del servidor');
+                                // console.log('✓ Clave privada recuperada y descifrada del servidor');
                             } catch (decryptError) {
-                                console.error('Error al descifrar clave privada:', decryptError);
-                                console.error('⚠️ No se pudo descifrar la clave privada');
+                                // console.error('Error al descifrar clave privada:', decryptError);
+                                // console.error('⚠️ No se pudo descifrar la clave privada');
                             }
                         }
                     }
                 } catch (error) {
-                    console.warn('No se pudo obtener clave privada del servidor:', error);
+                    // console.warn('No se pudo obtener clave privada del servidor:', error);
                 }
             } else {
-                console.log('✓ Clave privada cargada desde localStorage');
+                // console.log('✓ Clave privada cargada desde localStorage');
             }
             
             if (privateKey && privateKey !== 'undefined') {
                 setPrivateKey(privateKey);
             } else {
-                console.error('⚠️ No hay clave privada disponible. Los mensajes no podrán descifrarse.');
+                // console.error('⚠️ No hay clave privada disponible. Los mensajes no podrán descifrarse.');
             }
             
             // Conectar WebSocket
@@ -155,7 +155,7 @@ export const AuthProvider = ({ children }) => {
             
             return { success: true };
         } catch (error) {
-            console.error('Error en login:', error);
+            // console.error('Error en login:', error);
             
             // Verificar si requiere 2FA
             if (error.response?.status === 403 && error.response?.data?.detail?.includes('2FA')) {
@@ -190,7 +190,7 @@ export const AuthProvider = ({ children }) => {
             const response = await API.setup2FA();
             return { success: true, data: response };
         } catch (error) {
-            console.error('Error configurando 2FA:', error);
+            // console.error('Error configurando 2FA:', error);
             return { 
                 success: false, 
                 error: error.response?.data?.detail || error.message 
@@ -208,7 +208,7 @@ export const AuthProvider = ({ children }) => {
             
             return { success: true };
         } catch (error) {
-            console.error('Error habilitando 2FA:', error);
+            // console.error('Error habilitando 2FA:', error);
             return { 
                 success: false, 
                 error: error.response?.data?.detail || error.message 
@@ -231,7 +231,7 @@ export const AuthProvider = ({ children }) => {
             
             return { success: true };
         } catch (error) {
-            console.error('Error rotando claves:', error);
+            // console.error('Error rotando claves:', error);
             return { 
                 success: false, 
                 error: error.response?.data?.detail || error.message 

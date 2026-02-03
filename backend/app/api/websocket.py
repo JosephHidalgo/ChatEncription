@@ -10,6 +10,7 @@ from app.core.security import decode_token
 from app.models.models import User, Message, GroupMember, GroupMessage
 from app.schemas.schemas import WebSocketMessage, MessageEncrypted
 from app.utils.crypto import crypto_manager
+from app.utils.timezone import now as peru_now
 from loguru import logger
 
 
@@ -48,7 +49,7 @@ class ConnectionManager:
             self.active_connections[user_id] = []
         
         self.active_connections[user_id].append(websocket)
-        self.last_activity[user_id] = datetime.utcnow()
+        self.last_activity[user_id] = peru_now()
         
         logger.info(f"Usuario {user_id} conectado. Conexiones activas: {len(self.active_connections[user_id])}")
     
@@ -266,7 +267,7 @@ async def save_encrypted_message(
             signature=encrypted_data.get('signature'),
             encrypted_data=encrypted_data_json,
             nonce=nonce,
-            timestamp=datetime.utcnow()
+            timestamp=peru_now()
         )
         
         db.add(message)
@@ -363,7 +364,7 @@ async def handle_websocket_message(
             
             if message and message.recipient_id == current_user.id:
                 message.is_read = True
-                message.read_at = datetime.utcnow()
+                message.read_at = peru_now()
                 await db.commit()
                 
                 # Notificar al emisor
@@ -467,7 +468,7 @@ async def handle_websocket_message(
             iv=encrypted_data.get('iv'),
             signature=encrypted_data.get('signature'),
             nonce=nonce,
-            timestamp=datetime.utcnow()
+            timestamp=peru_now()
         )
         
         db.add(group_message)

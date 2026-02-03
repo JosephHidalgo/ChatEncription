@@ -30,7 +30,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
             // Filtrar el usuario actual
             setAvailableUsers(users.filter(u => u.id !== currentUser.id));
         } catch (error) {
-            console.error('Error cargando usuarios:', error);
+            // console.error('Error cargando usuarios:', error);
             setError('Error cargando usuarios');
         }
     };
@@ -61,8 +61,8 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
 
         try {
             // 1. Generar clave AES para el grupo
-            const groupKey = CryptoModule.generateGroupKey();
-            console.log('Clave de grupo generada:', groupKey.keyHex.substring(0, 32) + '...');
+            const groupKey = await CryptoModule.generateGroupKey();
+            // console.log('Clave de grupo generada:', groupKey.keyHex.substring(0, 32) + '...');
 
             // 2. Calcular hash SHA-256 de la clave
             const groupKeyHash = await CryptoModule.hashSHA256(groupKey.keyHex);
@@ -84,9 +84,9 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
                     );
 
                     encryptedKeys[memberId] = encryptedKey;
-                    console.log(`Clave encriptada para miembro ${memberId}`);
+                    // console.log(`Clave encriptada para miembro ${memberId}`);
                 } catch (error) {
-                    console.error(`Error encriptando clave para miembro ${memberId}:`, error);
+                    // console.error(`Error encriptando clave para miembro ${memberId}:`, error);
                     throw new Error(`Error procesando miembro ${memberId}`);
                 }
             }
@@ -106,14 +106,14 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
             const storageKey = `${CONFIG.STORAGE_KEYS.GROUP_KEY_PREFIX}${newGroup.id}`;
             localStorage.setItem(storageKey, groupKey.keyHex);
 
-            console.log('✅ Grupo creado exitosamente:', newGroup);
-            console.log('🔑 Clave guardada en localStorage con key:', storageKey);
-            console.log('🔑 Verificando clave guardada:', localStorage.getItem(storageKey)?.substring(0, 32) + '...');
+            // console.log('✅ Grupo creado exitosamente:', newGroup);
+            // console.log('🔑 Clave guardada en localStorage con key:', storageKey);
+            // console.log('🔑 Verificando clave guardada:', localStorage.getItem(storageKey)?.substring(0, 32) + '...');
 
             onGroupCreated(newGroup);
             onClose();
         } catch (error) {
-            console.error('Error creando grupo:', error);
+            // console.error('Error creando grupo:', error);
             setError(error.response?.data?.detail || 'Error al crear el grupo');
         } finally {
             setLoading(false);
@@ -126,7 +126,7 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
         <div className="modal-overlay" onClick={onClose}>
             <div className="modal-content" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
-                    <h2>🔒 Crear Grupo Seguro</h2>
+                    <h2>Crear Grupo Seguro</h2>
                     <button className="modal-close" onClick={onClose}>×</button>
                 </div>
 
@@ -154,13 +154,13 @@ const CreateGroupModal = ({ isOpen, onClose, onGroupCreated, currentUser }) => {
                             <label htmlFor="groupDescription" style={{ marginTop: '15px' }}>
                                 Descripción (Opcional)
                             </label>
-                            <textarea
+                            <input
                                 id="groupDescription"
+                                type="text"
                                 className="form-control"
                                 placeholder="Descripción del grupo..."
                                 value={groupDescription}
                                 onChange={(e) => setGroupDescription(e.target.value)}
-                                rows={3}
                                 maxLength={500}
                                 disabled={loading}
                             />

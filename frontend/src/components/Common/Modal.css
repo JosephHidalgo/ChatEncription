@@ -15,17 +15,18 @@
 
 .modal-content {
     background: white;
-    border-radius: 15px;
+    border-radius: 12px;
     width: 90%;
-    max-width: 600px;
+    max-width: 500px;
     max-height: 80vh;
     overflow-y: auto;
     animation: slideUp 0.3s ease;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
 }
 
 .modal-header {
-    padding: 20px 25px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 24px 24px 20px 24px;
+    border-bottom: 1px solid #e5e7eb;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -36,11 +37,11 @@
 }
 
 .modal-header h2 {
-    font-size: 20px;
-    color: var(--text-primary);
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    font-size: 18px;
+    font-weight: 600;
+    color: #111827;
+    margin: 0;
+    letter-spacing: -0.01em;
 }
 
 .modal-header h2 i {
@@ -57,25 +58,26 @@
 .modal-close {
     background: none;
     border: none;
-    font-size: 28px;
-    color: var(--text-secondary);
+    font-size: 24px;
+    color: #6b7280;
     cursor: pointer;
     width: 32px;
     height: 32px;
     display: flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    transition: all 0.3s;
+    border-radius: 6px;
+    transition: all 0.15s;
+    line-height: 1;
 }
 
 .modal-close:hover {
-    background: var(--light-gray);
-    color: var(--text-primary);
+    background: #f3f4f6;
+    color: #111827;
 }
 
 .modal-body {
-    padding: 25px;
+    padding: 24px;
 }
 
 .setting-item {
@@ -198,11 +200,11 @@
 
 .modal-footer {
     display: flex;
-    gap: 10px;
+    gap: 12px;
     justify-content: flex-end;
-    margin-top: 20px;
+    margin-top: 24px;
     padding-top: 20px;
-    border-top: 1px solid var(--border-color);
+    border-top: 1px solid #e5e7eb;
 }
 
 .members-list {

@@ -7,6 +7,7 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.core.database import Base
 from datetime import datetime
+from app.utils.timezone import now as peru_now
 
 
 class User(Base):
@@ -85,7 +86,7 @@ class Message(Base):
     signature = Column(Text, nullable=False) 
     
     # Metadatos
-    timestamp = Column(DateTime, default=func.now(), index=True)
+    timestamp = Column(DateTime, default=peru_now, index=True)
     is_read = Column(Boolean, default=False)
     read_at = Column(DateTime, nullable=True)
     
@@ -162,7 +163,7 @@ class AuditLog(Base):
     user_agent = Column(String(500), nullable=True)
     
     # Timestamp
-    timestamp = Column(DateTime, default=func.now(), index=True)
+    timestamp = Column(DateTime, default=peru_now, index=True)
     
     # Relación
     user = relationship("User", back_populates="audit_logs")
@@ -279,7 +280,7 @@ class GroupMessage(Base):
     signature = Column(Text, nullable=False)
     
     # Metadatos
-    timestamp = Column(DateTime, default=func.now(), index=True)
+    timestamp = Column(DateTime, default=peru_now, index=True)
     nonce = Column(String(64), unique=True, nullable=False)
     
     # Relaciones

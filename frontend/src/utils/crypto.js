@@ -4,9 +4,9 @@ const CryptoModule = {
 
     log(operation, data) {
         if (!this.debugMode) return;
-        console.group(`🔐 [CRYPTO] ${operation}`);
-        console.log(data);
-        console.groupEnd();
+        // console.group(`🔐 [CRYPTO] ${operation}`);
+        // console.log(data);
+        // console.groupEnd();
     },
 
     // ==================== UTILIDADES DE CONVERSIÓN ====================
@@ -39,7 +39,7 @@ const CryptoModule = {
 
             return bytes.buffer;
         } catch (error) {
-            console.error('Error en base64ToArrayBuffer:', error);
+            // console.error('Error en base64ToArrayBuffer:', error);
             throw new Error('Error decodificando base64: ' + error.message);
         }
     },
@@ -140,7 +140,7 @@ const CryptoModule = {
 
             return this.arrayBufferToBase64(encrypted);
         } catch (error) {
-            console.error('Error cifrando con AES:', error);
+            // console.error('Error cifrando con AES:', error);
             throw error;
         }
     },
@@ -193,13 +193,13 @@ const CryptoModule = {
             const decoder = new TextDecoder();
             return decoder.decode(decrypted);
         } catch (error) {
-            console.error('❌ Error descifrando con AES:', error);
-            console.error('   Detalles:', {
-                encryptedLength: encryptedBase64?.length,
-                keyLength: keyBytes?.length,
-                ivLength: ivBase64?.length,
-                errorMessage: error.message
-            });
+            // console.error('❌ Error descifrando con AES:', error);
+            // console.error('   Detalles:', {
+            //     encryptedLength: encryptedBase64?.length,
+            //     keyLength: keyBytes?.length,
+            //     ivLength: ivBase64?.length,
+            //     errorMessage: error.message
+            // });
             throw error;
         }
     },
@@ -231,7 +231,7 @@ const CryptoModule = {
                 privateKey: this.arrayBufferToBase64(privateKey)
             };
         } catch (error) {
-            console.error('Error generando par de claves RSA:', error);
+            // console.error('Error generando par de claves RSA:', error);
             throw error;
         }
     },
@@ -281,7 +281,7 @@ const CryptoModule = {
 
             return result;
         } catch (error) {
-            console.error('Error cifrando con RSA:', error);
+            // console.error('Error cifrando con RSA:', error);
             throw error;
         }
     },
@@ -312,7 +312,7 @@ const CryptoModule = {
 
             return decrypted;
         } catch (error) {
-            console.error('Error descifrando con RSA:', error);
+            // console.error('Error descifrando con RSA:', error);
             throw error;
         }
     },
@@ -353,18 +353,18 @@ const CryptoModule = {
 
             return result;
         } catch (error) {
-            console.error('Error en cifrado híbrido:', error);
+            // console.error('Error en cifrado híbrido:', error);
             throw error;
         }
     },
 
     async decryptMessage(encryptedData, privateKey) {
         try {
-            console.group('🔓 Desencriptando mensaje...');
-            console.log('📦 Datos cifrados recibidos:');
-            console.log('  • Mensaje cifrado:', encryptedData?.encrypted_message?.substring(0, 50) + '...');
-            console.log('  • Clave AES cifrada:', encryptedData?.encrypted_key?.substring(0, 50) + '...');
-            console.log('  • IV:', encryptedData?.iv);
+            // console.group('🔓 Desencriptando mensaje...');
+            // console.log('📦 Datos cifrados recibidos:');
+            // console.log('  • Mensaje cifrado:', encryptedData?.encrypted_message?.substring(0, 50) + '...');
+            // console.log('  • Clave AES cifrada:', encryptedData?.encrypted_key?.substring(0, 50) + '...');
+            // console.log('  • IV:', encryptedData?.iv);
 
             // Validar que tenemos todos los datos necesarios
             if (!encryptedData) {
@@ -387,47 +387,47 @@ const CryptoModule = {
                 throw new Error('No se proporcionó clave privada');
             }
 
-            console.log('\n🔑 Paso 1: Descifrando clave AES con RSA-OAEP...');
-            console.log('  • Clave privada (longitud):', privateKey?.length, 'chars');
+            // console.log('\n🔑 Paso 1: Descifrando clave AES con RSA-OAEP...');
+            // console.log('  • Clave privada (longitud):', privateKey?.length, 'chars');
 
             let aesKeyBuffer;
             try {
                 aesKeyBuffer = await this.decryptRSA(encrypted_key, privateKey);
             } catch (rsaError) {
-                console.error('  ❌ Error en descifrado RSA:', rsaError);
+                // console.error('  ❌ Error en descifrado RSA:', rsaError);
                 throw new Error('Error descifrando clave AES con RSA: ' + rsaError.message);
             }
 
             const aesKey = new Uint8Array(aesKeyBuffer);
-            console.log('  ✓ Clave AES descifrada:', aesKey.length, 'bytes');
+            // console.log('  ✓ Clave AES descifrada:', aesKey.length, 'bytes');
 
             if (aesKey.length !== 32) {
                 throw new Error(`Clave AES tiene tamaño incorrecto: ${aesKey.length} bytes (esperado: 32)`);
             }
 
-            console.log('\n📝 Paso 2: Descifrando mensaje con AES-256-CBC...');
-            console.log('  • Algoritmo: AES-256-CBC');
-            console.log('  • Longitud clave:', aesKey.length * 8, 'bits');
-            console.log('  • IV length:', iv.length, 'chars');
+            // console.log('\n📝 Paso 2: Descifrando mensaje con AES-256-CBC...');
+            // console.log('  • Algoritmo: AES-256-CBC');
+            // console.log('  • Longitud clave:', aesKey.length * 8, 'bits');
+            // console.log('  • IV length:', iv.length, 'chars');
 
             let message;
             try {
                 message = await this.decryptAES(encrypted_message, aesKey, iv);
             } catch (aesError) {
-                console.error('  ❌ Error en descifrado AES:', aesError);
+                // console.error('  ❌ Error en descifrado AES:', aesError);
                 throw new Error('Error descifrando mensaje con AES: ' + aesError.message);
             }
 
-            console.log('  ✓ Mensaje descifrado:', message.substring(0, 100));
+            // console.log('  ✓ Mensaje descifrado:', message.substring(0, 100));
 
-            console.log('\n✅ Desencriptación completada exitosamente');
-            console.groupEnd();
+            // console.log('\n✅ Desencriptación completada exitosamente');
+            // console.groupEnd();
 
             return message;
         } catch (error) {
-            console.error('❌ Error en descifrado:', error);
-            console.error('   Stack:', error.stack);
-            console.groupEnd();
+            // console.error('❌ Error en descifrado:', error);
+            // console.error('   Stack:', error.stack);
+            // console.groupEnd();
             throw error;
         }
     },
@@ -459,7 +459,7 @@ const CryptoModule = {
                 privateKey: this.arrayBufferToBase64(privateKey)
             };
         } catch (error) {
-            console.error('Error generando claves de firma:', error);
+            // console.error('Error generando claves de firma:', error);
             throw error;
         }
     },
@@ -492,7 +492,7 @@ const CryptoModule = {
 
             return this.arrayBufferToBase64(signature);
         } catch (error) {
-            console.error('Error firmando mensaje:', error);
+            // console.error('Error firmando mensaje:', error);
             throw error;
         }
     },
@@ -527,7 +527,7 @@ const CryptoModule = {
 
             return isValid;
         } catch (error) {
-            console.error('Error verificando firma:', error);
+            // console.error('Error verificando firma:', error);
             return false;
         }
     },
@@ -605,7 +605,7 @@ const CryptoModule = {
 
             return this.arrayBufferToBase64(combined);
         } catch (error) {
-            console.error('Error cifrando clave privada:', error);
+            // console.error('Error cifrando clave privada:', error);
             throw error;
         }
     },
@@ -642,7 +642,7 @@ const CryptoModule = {
             const decoder = new TextDecoder();
             return decoder.decode(decrypted);
         } catch (error) {
-            console.error('Error descifrando clave privada:', error);
+            // console.error('Error descifrando clave privada:', error);
             throw new Error('Contraseña incorrecta o datos corruptos');
         }
     },
@@ -710,7 +710,7 @@ const CryptoModule = {
 
             return encrypted;
         } catch (error) {
-            console.error('Error encriptando clave de grupo:', error);
+            // console.error('Error encriptando clave de grupo:', error);
             throw error;
         }
     },
@@ -737,7 +737,7 @@ const CryptoModule = {
 
             return decrypted;
         } catch (error) {
-            console.error('Error desencriptando clave de grupo:', error);
+            // console.error('Error desencriptando clave de grupo:', error);
             throw error;
         }
     },
@@ -790,7 +790,7 @@ const CryptoModule = {
                 iv: iv
             };
         } catch (error) {
-            console.error('Error encriptando mensaje de grupo:', error);
+            // console.error('Error encriptando mensaje de grupo:', error);
             throw error;
         }
     },
@@ -817,7 +817,7 @@ const CryptoModule = {
 
             return decrypted;
         } catch (error) {
-            console.error('Error desencriptando mensaje de grupo:', error);
+            // console.error('Error desencriptando mensaje de grupo:', error);
             throw error;
         }
     },
@@ -839,7 +839,7 @@ const CryptoModule = {
 
             return signature;
         } catch (error) {
-            console.error('Error firmando mensaje de grupo:', error);
+            // console.error('Error firmando mensaje de grupo:', error);
             throw error;
         }
     },
@@ -861,7 +861,7 @@ const CryptoModule = {
 
             return isValid;
         } catch (error) {
-            console.error('Error verificando firma de grupo:', error);
+            // console.error('Error verificando firma de grupo:', error);
             return false;
         }
     }

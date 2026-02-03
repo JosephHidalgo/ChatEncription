@@ -33,7 +33,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
             const membersData = await API.getGroupMembers(group.id);
             setMembers(membersData);
         } catch (error) {
-            console.error('Error cargando miembros:', error);
+            // console.error('Error cargando miembros:', error);
             setError('Error al cargar miembros');
         } finally {
             setLoading(false);
@@ -45,7 +45,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
             const users = await API.getUsers();
             setAvailableUsers(users);
         } catch (error) {
-            console.error('Error cargando usuarios:', error);
+            // console.error('Error cargando usuarios:', error);
         }
     };
 
@@ -93,7 +93,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
             setSelectedUser('');
             onRefresh && onRefresh();
         } catch (error) {
-            console.error('Error agregando miembro:', error);
+            // console.error('Error agregando miembro:', error);
             setError(error.response?.data?.detail || 'Error al agregar miembro');
         } finally {
             setAddingMember(false);
@@ -108,7 +108,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
             const codeData = await API.generateInviteCode(group.id, 10, 24);
             setInviteCode(codeData);
         } catch (error) {
-            console.error('Error generando código:', error);
+            // console.error('Error generando código:', error);
             setError(error.response?.data?.detail || 'Error al generar código');
         } finally {
             setGeneratingCode(false);
