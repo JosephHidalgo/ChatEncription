@@ -46,8 +46,8 @@ class UserResponse(UserBase):
     is_verified: bool
     totp_enabled: bool
     public_key_rsa: Optional[str] = None
-    created_at: datetime
-    last_login: Optional[datetime]
+    created_at: Optional[datetime] = None
+    last_login: Optional[datetime] = None
     
     class Config:
         from_attributes = True
@@ -298,34 +298,6 @@ class AddMemberRequest(BaseModel):
     """Schema para agregar miembro a grupo"""
     user_id: int
     encrypted_group_key: str  # Clave AES del grupo encriptada con RSA del nuevo miembro
-
-
-class JoinGroupWithCodeRequest(BaseModel):
-    """Schema para unirse a grupo con código"""
-    code: str
-    encrypted_group_key: str  # Cliente encripta la clave con su propia RSA
-
-
-class InviteCodeCreate(BaseModel):
-    """Schema para crear código de invitación"""
-    max_uses: Optional[int] = None  # None = ilimitado
-    expires_in_hours: Optional[int] = None  # None = no expira
-
-
-class InviteCodeResponse(BaseModel):
-    """Schema de respuesta de código de invitación"""
-    id: int
-    code: str
-    group_id: int
-    group_name: str
-    max_uses: Optional[int]
-    current_uses: int
-    expires_at: Optional[datetime]
-    is_active: bool
-    created_at: datetime
-    
-    class Config:
-        from_attributes = True
 
 
 class GroupKeyDistribution(BaseModel):

@@ -16,7 +16,7 @@ const ChatArea = ({
     console.log('🎨 [ChatArea] Componente renderizado', { selectedChat, chatType });
     console.log('   selectedChat ID:', selectedChat?.id);
     console.log('   chatType:', chatType);
-    
+
     const { user, privateKey } = useAuth();
     const [messages, setMessages] = useState([]);
     const [messageText, setMessageText] = useState('');
@@ -25,7 +25,7 @@ const ChatArea = ({
     const [typingUser, setTypingUser] = useState(null);
     const messagesEndRef = useRef(null);
     const typingTimeoutRef = useRef(null);
-    
+
     // Refs para mantener valores actualizados en los listeners
     const selectedChatRef = useRef(selectedChat);
     const chatTypeRef = useRef(chatType);
@@ -35,7 +35,7 @@ const ChatArea = ({
     const selectedUser = chatType === 'user' ? selectedChat : null;
     const selectedGroup = chatType === 'group' ? selectedChat : null;
     const chatId = selectedChat?.id;
-    
+
     // Actualizar refs cuando cambien los valores
     useEffect(() => {
         console.log('📍 [ChatArea] useEffect de refs ejecutado');
@@ -65,7 +65,7 @@ const ChatArea = ({
         console.log('🔄 [ChatArea] useEffect de listeners ejecutado');
         console.log('   chatType:', chatType);
         console.log('   selectedChat:', selectedChat);
-        
+
         if (!chatType || !selectedChat) {
             console.log('   ⚠️ No hay chat seleccionado, saltando configuración de listeners');
             return;
@@ -73,28 +73,28 @@ const ChatArea = ({
 
         // Registrar listeners solo una vez cuando el componente se monta
         // Los handlers usarán refs para acceder a los valores actualizados
-        
+
         if (chatType === 'user') {
             console.log('   → Configurando listeners de usuario');
             console.log('   Usuario actual (yo):', user.id, user.username);
-            
+
             const handleNewMessage = (data) => {
                 console.log('📨 [ChatArea] Mensaje privado recibido:', data);
                 const currentSelectedUser = selectedChatRef.current;
                 console.log('   Usuario seleccionado:', currentSelectedUser?.id, currentSelectedUser?.username);
                 console.log('   Yo:', user.id);
-                
+
                 // Verificar si el mensaje es de/para el usuario seleccionado
                 const isFromSelected = data.sender_id === currentSelectedUser?.id;
                 const isToSelected = data.recipient_id === currentSelectedUser?.id;
                 const isFromMe = data.sender_id === user.id;
                 const isToMe = data.recipient_id === user.id;
-                
+
                 console.log('   isFromSelected:', isFromSelected);
                 console.log('   isToSelected:', isToSelected);
                 console.log('   isFromMe:', isFromMe);
                 console.log('   isToMe:', isToMe);
-                
+
                 // Mostrar el mensaje si es una conversación con el usuario seleccionado
                 if ((isFromSelected && isToMe) || (isFromMe && isToSelected)) {
                     console.log('✓ Mensaje es parte de esta conversación, procesando...');
@@ -105,10 +105,17 @@ const ChatArea = ({
             };
 
             const handleTyping = (data) => {
+                console.log('⌨️ [ChatArea] Notificación de typing recibida:', data);
                 const currentUser = selectedChatRef.current;
-                if (data.user_id === currentUser?.id) {
-                    setTypingUser(data.username);
+                console.log('   Usuario seleccionado:', currentUser?.id);
+                console.log('   Sender ID:', data.sender_id);
+                
+                if (data.sender_id === currentUser?.id) {
+                    console.log('✓ Mostrando indicador de typing');
+                    setTypingUser(data.sender_username);
                     setTimeout(() => setTypingUser(null), 3000);
+                } else {
+                    console.log('⚠️ Typing de otro usuario, ignorando');
                 }
             };
 
@@ -120,11 +127,11 @@ const ChatArea = ({
                 wsService.off('message', handleNewMessage);
                 wsService.off('typing', handleTyping);
             };
-            
+
         } else if (chatType === 'group') {
             console.log('   → Configurando listeners de grupo');
             console.log('   Grupo ID:', selectedChat.id);
-            
+
             const handleGroupMessage = (data) => {
                 console.log('🔔 Listener de grupo activado. Data:', data);
                 const currentGroup = selectedChatRef.current;
@@ -170,6 +177,10 @@ const ChatArea = ({
     useEffect(() => {
         scrollToBottom();
     }, [messages]);
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [typingUser]);
 
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -290,7 +301,7 @@ const ChatArea = ({
                     return {
                         ...msg,
                         text: decryptedText,
-                        created_at: msg.created_at,
+                        created_at: msg.timestamp,
                         isMine: msg.sender_id === user.id
                     };
                 } catch (error) {
@@ -298,7 +309,7 @@ const ChatArea = ({
                     return {
                         ...msg,
                         text: '[Error descifrando mensaje]',
-                        created_at: msg.created_at,
+                        created_at: msg.timestamp,
                         isMine: msg.sender_id === user.id
                     };
                 }
@@ -487,7 +498,7 @@ const ChatArea = ({
         console.log('\n📡 Enviando por WebSocket...');
         wsService.send(wsPayload);
         console.log('✓ Mensaje enviado');
-        
+
         // Agregar el mensaje localmente para el emisor
         console.log('\n➕ Agregando mensaje localmente...');
         const newMessage = {
@@ -500,7 +511,7 @@ const ChatArea = ({
         };
         setMessages((prev) => [...prev, newMessage]);
         console.log('✓ Mensaje agregado al chat');
-        
+
         console.groupEnd();
     };
 
@@ -584,6 +595,11 @@ const ChatArea = ({
         }, 1000);
     };
 
+    const handleMessageChange = (e) => {
+        setMessageText(e.target.value);
+        handleTyping();
+    };
+
     // Renderizar header según tipo de chat
     const renderHeader = () => {
         if (chatType === 'user' && selectedUser) {
@@ -591,12 +607,7 @@ const ChatArea = ({
                 <>
                     <h2>{selectedUser.username}</h2>
                     <div className="chat-actions">
-                        <button onClick={onShowEncryptionInfo} className="btn-icon" title="Ver información de cifrado">
-                            🔐
-                        </button>
-                        <button onClick={onBack} className="btn-back">
-                            ← Volver
-                        </button>
+                        <button onClick={onBack} className="btn-back" title="Volver" />
                     </div>
                 </>
             );
@@ -611,12 +622,7 @@ const ChatArea = ({
                         <button onClick={onShowGroupDetails} className="btn-icon" title="Ver detalles del grupo">
                             👥
                         </button>
-                        <button onClick={onShowEncryptionInfo} className="btn-icon" title="Ver información de cifrado">
-                            🔐
-                        </button>
-                        <button onClick={onBack} className="btn-back">
-                            ← Volver
-                        </button>
+                        <button onClick={onBack} className="btn-back" title="Volver" />
                     </div>
                 </>
             );
@@ -632,15 +638,17 @@ const ChatArea = ({
 
         return (
             <div key={msg.id} className={`message ${isMine ? 'sent' : 'received'}`}>
-                {chatType === 'group' && !isMine && (
-                    <div className="message-sender">{msg.sender_username}</div>
-                )}
-                <div className="message-content">{msg.text}</div>
-                <div className="message-time">
-                    {new Date(msg.created_at).toLocaleTimeString('es-ES', {
-                        hour: '2-digit',
-                        minute: '2-digit'
-                    })}
+                <div className="message-content">
+                    {chatType === 'group' && !isMine && (
+                        <div className="message-sender">{msg.sender_username}</div>
+                    )}
+                    <span className="message-text">{msg.text}</span>
+                    <span className="message-time">
+                        {new Date(msg.created_at).toLocaleTimeString('es-ES', {
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        })}
+                    </span>
                 </div>
             </div>
         );
@@ -678,8 +686,14 @@ const ChatArea = ({
                     messages.map(renderMessage)
                 )}
                 {typingUser && (
-                    <div className="typing-indicator">
-                        {typingUser} está escribiendo...
+                    <div className="message received">
+                        <div className="message-content typing-bubble">
+                            <div className="typing-dots">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                        </div>
                     </div>
                 )}
                 <div ref={messagesEndRef} />
@@ -695,13 +709,15 @@ const ChatArea = ({
                             : `Mensaje a ${selectedUser?.username}...`
                     }
                     value={messageText}
-                    onChange={(e) => setMessageText(e.target.value)}
-                    onKeyPress={handleTyping}
+                    onChange={handleMessageChange}
                     disabled={sending}
                 />
-                <button type="submit" className="btn-send" disabled={sending || !messageText.trim()}>
-                    {sending ? 'Enviando...' : 'Enviar'}
-                </button>
+                <button
+                    type="submit"
+                    className="btn-send"
+                    disabled={sending || !messageText.trim()}
+                    title={sending ? 'Enviando...' : 'Enviar mensaje'}
+                />
             </form>
         </div>
     );

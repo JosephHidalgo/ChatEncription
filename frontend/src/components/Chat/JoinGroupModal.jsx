@@ -89,7 +89,6 @@ const JoinGroupModal = ({ isOpen, onClose, onGroupJoined, currentUser }) => {
                     <div className="alert alert-info">
                         <strong>ℹ️ Nota:</strong> Para unirte al grupo necesitas que el administrador
                         te agregue directamente o te proporcione el código de invitación.
-                        El flujo actual requiere que el admin te agregue usando tu ID de usuario.
                     </div>
                 </div>
 

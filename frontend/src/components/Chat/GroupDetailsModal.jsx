@@ -129,9 +129,9 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
             <div className="modal-content modal-large" onClick={(e) => e.stopPropagation()}>
                 <div className="modal-header">
                     <div>
-                        <h2>👥 {group.name}</h2>
+                        <h2>{group.name}</h2>
                         {group.description && (
-                            <p style={{ margin: '5px 0 0 0', color: '#666', fontSize: '0.9rem' }}>
+                            <p className="group-description">
                                 {group.description}
                             </p>
                         )}
@@ -167,7 +167,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
                                                     )}
                                                 </div>
                                                 <div className="member-joined">
-                                                    Unido: {new Date(member.joined_at).toLocaleDateString()}
+                                                    Se unió el {new Date(member.joined_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' })}
                                                 </div>
                                             </div>
                                         </div>
@@ -177,18 +177,18 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
                         )}
 
                         {isAdmin && (
-                            <div style={{ marginTop: '20px' }}>
+                            <div className="admin-actions">
                                 <button
                                     className="btn btn-primary"
                                     onClick={() => setShowAddMember(!showAddMember)}
                                 >
-                                    {showAddMember ? 'Cancelar' : '+ Agregar Miembro'}
+                                    {showAddMember ? 'Cancelar' : 'Agregar Miembro'}
                                 </button>
 
                                 {showAddMember && (
                                     <div className="add-member-form">
                                         <select
-                                            className="form-control"
+                                            className="select-user"
                                             value={selectedUser}
                                             onChange={(e) => setSelectedUser(e.target.value)}
                                             disabled={addingMember}
@@ -198,12 +198,12 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
                                                 .filter(u => !members.some(m => m.user_id === u.id))
                                                 .map(user => (
                                                     <option key={user.id} value={user.id}>
-                                                        {user.username} ({user.email})
+                                                        {user.username}
                                                     </option>
                                                 ))}
                                         </select>
                                         <button
-                                            className="btn btn-success"
+                                            className="btn btn-primary"
                                             onClick={handleAddMember}
                                             disabled={!selectedUser || addingMember}
                                         >
@@ -218,7 +218,7 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
                     {isAdmin && (
                         <div className="group-details-section">
                             <h3>Código de Invitación</h3>
-                            <p style={{ fontSize: '0.9rem', color: '#666' }}>
+                            <p className="section-description">
                                 Genera un código para que otros usuarios puedan unirse al grupo
                             </p>
 
@@ -228,28 +228,34 @@ const GroupDetailsModal = ({ isOpen, onClose, group, currentUser, onRefresh }) =
                                     onClick={handleGenerateInviteCode}
                                     disabled={generatingCode}
                                 >
-                                    {generatingCode ? 'Generando...' : '🔑 Generar Código'}
+                                    {generatingCode ? 'Generando...' : 'Generar Código'}
                                 </button>
                             ) : (
                                 <div className="invite-code-display">
                                     <div className="code-box">
                                         <code>{inviteCode.code}</code>
                                         <button
-                                            className="btn btn-sm"
+                                            className="btn-copy"
                                             onClick={copyInviteCode}
                                             title="Copiar código"
                                         >
-                                            📋
+                                            Copiar
                                         </button>
                                     </div>
                                     <div className="code-info">
-                                        <p>• Usos: {inviteCode.current_uses} / {inviteCode.max_uses || '∞'}</p>
+                                        <div className="info-item">
+                                            <span className="info-label">Usos:</span>
+                                            <span className="info-value">{inviteCode.current_uses} / {inviteCode.max_uses || '∞'}</span>
+                                        </div>
                                         {inviteCode.expires_at && (
-                                            <p>• Expira: {new Date(inviteCode.expires_at).toLocaleString()}</p>
+                                            <div className="info-item">
+                                                <span className="info-label">Expira:</span>
+                                                <span className="info-value">{new Date(inviteCode.expires_at).toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</span>
+                                            </div>
                                         )}
                                     </div>
                                     <button
-                                        className="btn btn-secondary btn-sm"
+                                        className="btn btn-secondary"
                                         onClick={() => setInviteCode(null)}
                                     >
                                         Generar Nuevo

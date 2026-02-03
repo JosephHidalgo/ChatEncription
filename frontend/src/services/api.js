@@ -27,8 +27,11 @@ api.interceptors.request.use(
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        if (error.response?.status === 401) {
-            // Token inválido o expirado
+        // Solo redirigir en 401 si NO es una petición de login/register
+        const isAuthRequest = error.config?.skipAuth === true;
+        
+        if (error.response?.status === 401 && !isAuthRequest) {
+            // Token inválido o expirado (solo para usuarios ya autenticados)
             localStorage.clear();
             window.location.href = '/';
         }
@@ -197,28 +200,6 @@ const API = {
     async addMemberToGroup(groupId, userId, encryptedGroupKey) {
         const response = await api.post(`/groups/${groupId}/members`, {
             user_id: userId,
-            encrypted_group_key: encryptedGroupKey
-        });
-        return response.data;
-    },
-
-    /**
-     * Generar código de invitación (solo admin)
-     */
-    async generateInviteCode(groupId, maxUses = null, expiresInHours = null) {
-        const response = await api.post(`/groups/${groupId}/invite-codes`, {
-            max_uses: maxUses,
-            expires_in_hours: expiresInHours
-        });
-        return response.data;
-    },
-
-    /**
-     * Unirse a grupo con código
-     */
-    async joinGroupWithCode(code, encryptedGroupKey) {
-        const response = await api.post('/groups/join', {
-            code: code,
             encrypted_group_key: encryptedGroupKey
         });
         return response.data;

@@ -11,9 +11,7 @@ from app.models.models import User
 from app.schemas.schemas import (
     GroupCreate, GroupResponse, GroupDetailResponse,
     GroupMessageCreate, GroupMessageResponse,
-    AddMemberRequest, GroupMemberResponse,
-    InviteCodeCreate, InviteCodeResponse,
-    JoinGroupWithCodeRequest
+    AddMemberRequest, GroupMemberResponse
 )
 from app.services.group_service import GroupService
 
@@ -203,81 +201,6 @@ async def add_member(
         can_send_messages=member.can_send_messages,
         can_add_members=member.can_add_members,
         joined_at=member.joined_at
-    )
-
-
-@router.post("/{group_id}/invite-codes", response_model=InviteCodeResponse, status_code=status.HTTP_201_CREATED)
-async def generate_invite_code(
-    group_id: int,
-    code_data: InviteCodeCreate,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Genera un código de invitación para el grupo (solo administrador).
-    
-    Parámetros opcionales:
-    - max_uses: Número máximo de usos (null = ilimitado)
-    - expires_in_hours: Horas hasta expiración (null = no expira)
-    """
-    service = GroupService(db)
-    invite_code = await service.generate_invite_code(
-        group_id=group_id,
-        admin_id=current_user.id,
-        code_data=code_data,
-        ip_address=request.client.host if request.client else None
-    )
-    
-    await db.refresh(invite_code, ["group"])
-    
-    return InviteCodeResponse(
-        id=invite_code.id,
-        code=invite_code.code,
-        group_id=invite_code.group_id,
-        group_name=invite_code.group.name,
-        max_uses=invite_code.max_uses,
-        current_uses=invite_code.current_uses,
-        expires_at=invite_code.expires_at,
-        is_active=invite_code.is_active,
-        created_at=invite_code.created_at
-    )
-
-
-@router.post("/join", response_model=GroupResponse, status_code=status.HTTP_201_CREATED)
-async def join_group_with_code(
-    join_data: JoinGroupWithCodeRequest,
-    request: Request,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Une al usuario a un grupo mediante código de invitación.
-    
-    El cliente debe:
-    1. Obtener el código de invitación
-    2. Consultar la información del grupo (nombre, etc.)
-    3. Pedir al admin o a otro miembro la clave AES encriptada
-       O bien, el servidor puede facilitar esto:
-       - El que invita encripta la clave AES con la pública del nuevo miembro
-       - La envía junto con el código
-    """
-    service = GroupService(db)
-    member = await service.join_with_code(
-        user_id=current_user.id,
-        join_data=join_data,
-        ip_address=request.client.host if request.client else None
-    )
-    
-    group = await service.get_group(member.group_id, current_user.id)
-    
-    return GroupResponse(
-        id=group.id,
-        name=group.name,
-        description=group.description,
-        admin_id=group.admin_id,
-        created_at=group.created_at,
-        is_active=group.is_active
     )
 
 

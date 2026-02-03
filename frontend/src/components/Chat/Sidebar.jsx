@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import API from '../../services/api';
+import wsService from '../../services/websocket';
 import './Chat.css';
 
 const Sidebar = ({ 
@@ -10,7 +11,6 @@ const Sidebar = ({
     onSelectGroup,
     onShowSettings,
     onCreateGroup,
-    onJoinGroup,
     refreshKey
 }) => {
     const { user, logout } = useAuth();
@@ -18,12 +18,57 @@ const Sidebar = ({
     const [groups, setGroups] = useState([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('users'); // 'users' o 'groups'
+    const [showMenu, setShowMenu] = useState(false);
+    const [onlineUsers, setOnlineUsers] = useState(new Set());
 
     useEffect(() => {
         loadUsers();
         loadGroups();
+        requestOnlineUsers();
     }, [refreshKey]);
+
+    useEffect(() => {
+        // Escuchar eventos de usuarios online/offline
+        const handleUserOnline = (data) => {
+            if (data.users) {
+                // Lista completa de usuarios online
+                setOnlineUsers(new Set(data.users));
+            } else if (data.user_id) {
+                // Usuario específico se conectó
+                setOnlineUsers(prev => new Set([...prev, data.user_id]));
+            }
+        };
+
+        const handleUserOffline = (data) => {
+            if (data.user_id) {
+                setOnlineUsers(prev => {
+                    const newSet = new Set(prev);
+                    newSet.delete(data.user_id);
+                    return newSet;
+                });
+            }
+        };
+
+        wsService.on('online', handleUserOnline);
+        wsService.on('offline', handleUserOffline);
+
+        return () => {
+            wsService.off('online', handleUserOnline);
+            wsService.off('offline', handleUserOffline);
+        };
+    }, []);
+
+    useEffect(() => {
+        // Cerrar menú al hacer clic fuera
+        const handleClickOutside = (e) => {
+            if (showMenu && !e.target.closest('.sidebar-actions')) {
+                setShowMenu(false);
+            }
+        };
+
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, [showMenu]);
 
     const loadUsers = async () => {
         try {
@@ -47,6 +92,10 @@ const Sidebar = ({
         }
     };
 
+    const requestOnlineUsers = () => {
+        wsService.send({ type: 'get_online_users' });
+    };
+
     const filteredUsers = users.filter(u =>
         u.username.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -54,6 +103,12 @@ const Sidebar = ({
     const filteredGroups = groups.filter(g =>
         g.name.toLowerCase().includes(searchTerm.toLowerCase())
     );
+
+    // Combinar usuarios y grupos en una sola lista (usuarios primero)
+    const allChats = [
+        ...filteredUsers.map(u => ({ ...u, type: 'user' })),
+        ...filteredGroups.map(g => ({ ...g, type: 'group' }))
+    ];
 
     const getAvatarGradient = (userId) => {
         const gradients = [
@@ -68,6 +123,14 @@ const Sidebar = ({
         ];
         const index = userId % gradients.length;
         return `linear-gradient(135deg, ${gradients[index][0]}, ${gradients[index][1]})`;
+    };
+
+    const handleChatClick = (chat) => {
+        if (chat.type === 'group') {
+            onSelectGroup(chat);
+        } else {
+            onSelectUser(chat);
+        }
     };
 
     return (
@@ -87,142 +150,93 @@ const Sidebar = ({
                 </div>
                 <div className="sidebar-actions">
                     <button 
-                        className="btn-icon" 
-                        onClick={onShowSettings}
-                        title="Configuración"
+                        className="btn-icon menu-button" 
+                        onClick={() => setShowMenu(!showMenu)}
+                        title="Menú"
                     >
-                        <i className="fas fa-cog"></i>
+                        <i className="fas fa-ellipsis-v"></i>
                     </button>
-                    <button 
-                        className="btn-icon" 
-                        onClick={logout}
-                        title="Cerrar sesión"
-                    >
-                        <i className="fas fa-sign-out-alt"></i>
-                    </button>
+                    {showMenu && (
+                        <div className="dropdown-menu">
+                            <button onClick={() => { onCreateGroup(); setShowMenu(false); }}>
+                                <i className="fas fa-plus"></i> Crear Grupo
+                            </button>
+                            {/* <button onClick={() => { onShowSettings(); setShowMenu(false); }}>
+                                <i className="fas fa-cog"></i> Configuración
+                            </button> */}
+                            <button onClick={logout} className="logout-btn">
+                                <i className="fas fa-sign-out-alt"></i> Cerrar Sesión
+                            </button>
+                        </div>
+                    )}
                 </div>
-            </div>
-
-            {/* Tabs para cambiar entre usuarios y grupos */}
-            <div className="sidebar-tabs">
-                <button
-                    className={`tab ${activeTab === 'users' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('users')}
-                >
-                    <i className="fas fa-user"></i> Usuarios
-                </button>
-                <button
-                    className={`tab ${activeTab === 'groups' ? 'active' : ''}`}
-                    onClick={() => setActiveTab('groups')}
-                >
-                    <i className="fas fa-users"></i> Grupos
-                </button>
             </div>
 
             <div className="search-box">
                 <i className="fas fa-search"></i>
                 <input
                     type="text"
-                    placeholder={activeTab === 'users' ? 'Buscar usuarios...' : 'Buscar grupos...'}
+                    placeholder="Buscar chats..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
 
-            {/* Botones de acción para grupos */}
-            {activeTab === 'groups' && (
-                <div className="group-actions">
-                    <button className="btn btn-primary btn-sm" onClick={onCreateGroup}>
-                        <i className="fas fa-plus"></i> Crear Grupo
-                    </button>
-                    <button className="btn btn-secondary btn-sm" onClick={onJoinGroup}>
-                        <i className="fas fa-sign-in-alt"></i> Unirse
-                    </button>
-                </div>
-            )}
-
-            {/* Lista de usuarios */}
-            {activeTab === 'users' && (
-                <div className="users-list">
-                    {loading ? (
-                        <div className="loading-users">
-                            <i className="fas fa-spinner fa-spin"></i>
-                            <p>Cargando usuarios...</p>
-                        </div>
-                    ) : filteredUsers.length === 0 ? (
-                        <div className="no-users">
-                            <i className="fas fa-users"></i>
-                            <p>No se encontraron usuarios</p>
-                        </div>
-                    ) : (
-                        filteredUsers.map((u) => (
+            {/* Lista unificada de chats */}
+            <div className="users-list">
+                {loading ? (
+                    <div className="loading-users">
+                        <i className="fas fa-spinner fa-spin"></i>
+                        <p>Cargando chats...</p>
+                    </div>
+                ) : allChats.length === 0 ? (
+                    <div className="no-users">
+                        <i className="fas fa-comments"></i>
+                        <p>No hay chats disponibles</p>
+                    </div>
+                ) : (
+                    allChats.map((chat) => (
+                        chat.type === 'group' ? (
                             <div
-                                key={u.id}
-                                className={`user-item ${chatType === 'user' && selectedChat?.id === u.id ? 'active' : ''}`}
-                                onClick={() => onSelectUser(u)}
+                                key={`group-${chat.id}`}
+                                className={`user-item ${chatType === 'group' && selectedChat?.id === chat.id ? 'active' : ''}`}
+                                onClick={() => handleChatClick(chat)}
+                            >
+                                <div className="user-avatar group-avatar">
+                                    <i className="fas fa-users"></i>
+                                </div>
+                                <div className="user-item-info">
+                                    <h4>{chat.name}</h4>
+                                    <p className="user-email">
+                                        {chat.member_count || 0} miembro{chat.member_count !== 1 ? 's' : ''}
+                                    </p>
+                                </div>
+                            </div>
+                        ) : (
+                            <div
+                                key={`user-${chat.id}`}
+                                className={`user-item ${chatType === 'user' && selectedChat?.id === chat.id ? 'active' : ''}`}
+                                onClick={() => handleChatClick(chat)}
                             >
                                 <div 
                                     className="user-avatar"
-                                    style={{ background: getAvatarGradient(u.id) }}
+                                    style={{ background: getAvatarGradient(chat.id) }}
                                 >
                                     <i className="fas fa-user"></i>
                                 </div>
                                 <div className="user-item-info">
-                                    <h4>{u.username}</h4>
-                                    <p className="user-email">{u.email}</p>
-                                </div>
-                                {u.is_online && (
-                                    <span className="online-indicator"></span>
-                                )}
-                            </div>
-                        ))
-                    )}
-                </div>
-            )}
-
-            {/* Lista de grupos */}
-            {activeTab === 'groups' && (
-                <div className="users-list">
-                    {loading ? (
-                        <div className="loading-users">
-                            <i className="fas fa-spinner fa-spin"></i>
-                            <p>Cargando grupos...</p>
-                        </div>
-                    ) : filteredGroups.length === 0 ? (
-                        <div className="no-users">
-                            <i className="fas fa-users"></i>
-                            <p>No tienes grupos aún</p>
-                            <button 
-                                className="btn btn-primary btn-sm" 
-                                onClick={onCreateGroup}
-                                style={{ marginTop: '10px' }}
-                            >
-                                Crear tu primer grupo
-                            </button>
-                        </div>
-                    ) : (
-                        filteredGroups.map((group) => (
-                            <div
-                                key={group.id}
-                                className={`group-list-item ${chatType === 'group' && selectedChat?.id === group.id ? 'active' : ''}`}
-                                onClick={() => onSelectGroup(group)}
-                            >
-                                <div className="group-icon">
-                                    <i className="fas fa-users"></i>
-                                </div>
-                                <div className="group-info">
-                                    <div className="group-name">{group.name}</div>
-                                    <div className="group-members-count">
-                                        {group.member_count || 0} miembro{group.member_count !== 1 ? 's' : ''}
-                                    </div>
+                                    <h4>{chat.username}</h4>
+                                    <p className={`user-status ${onlineUsers.has(chat.id) ? 'online' : 'offline'}`}>
+                                        <span className="status-dot"></span>
+                                        {onlineUsers.has(chat.id) ? 'En línea' : 'Desconectado'}
+                                    </p>
                                 </div>
                             </div>
-                        ))
-                    )}
-                </div>
-            )}
+                        )
+                    ))
+                )}
+            </div>
         </div>
-
     );
 };
 

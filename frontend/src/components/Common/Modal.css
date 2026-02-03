@@ -47,6 +47,13 @@
     color: var(--whatsapp-green);
 }
 
+.group-description {
+    margin: 8px 0 0 0;
+    color: #666;
+    font-size: 0.9rem;
+    font-weight: normal;
+}
+
 .modal-close {
     background: none;
     border: none;
@@ -314,12 +321,60 @@
     font-size: 16px;
     color: var(--text-primary);
     margin-bottom: 15px;
+    font-weight: 600;
+}
+
+.section-description {
+    font-size: 0.9rem;
+    color: #666;
+    margin-bottom: 15px;
+}
+
+.admin-actions {
+    margin-top: 20px;
 }
 
 .add-member-form {
     display: flex;
     gap: 10px;
     margin-top: 15px;
+    align-items: stretch;
+}
+
+.select-user {
+    flex: 1;
+    padding: 10px 14px;
+    border: 1.5px solid #d1d5db;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-primary);
+    background: white;
+    transition: all 0.2s;
+    outline: none;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23666' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 36px;
+}
+
+.select-user:hover {
+    border-color: #9ca3af;
+}
+
+.select-user:focus {
+    border-color: var(--whatsapp-green);
+    box-shadow: 0 0 0 3px rgba(37, 211, 102, 0.1);
+}
+
+.select-user:disabled {
+    background-color: #f3f4f6;
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
+.select-user option {
+    padding: 10px;
 }
 
 .add-member-form select {
@@ -344,8 +399,45 @@
     flex: 1;
     font-size: 16px;
     font-weight: bold;
-    color: var(--primary-color);
+    color: var(--whatsapp-green);
     letter-spacing: 1px;
+}
+
+.btn-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 15px;
+}
+
+.info-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.info-label {
+    font-size: 0.9rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+
+.info-value {
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+.code-info p {
+    background: #1ea672;
+    transform: translateY(-1px);
+}
+
+.btn-copy:active {
+    transform: translateY(0);
 }
 
 .code-info {
