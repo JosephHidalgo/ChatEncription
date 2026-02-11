@@ -1,15 +1,7 @@
-const isSecure = window.location.protocol === 'https:';
-const protocol = isSecure ? 'https' : 'http';
-const wsProtocol = isSecure ? 'wss' : 'ws';
-
 const CONFIG = {
-    API_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `${protocol}://localhost:8000`
-        : `${protocol}://${window.location.hostname}:8000`,
+    API_URL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
 
-    WS_URL: window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-        ? `${wsProtocol}://localhost:8000/ws/chat`
-        : `${wsProtocol}://${window.location.hostname}:8000/ws/chat`,
+    WS_URL: import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/chat',
 
     APP_NAME: 'SecureChat',
     VERSION: '2.0.0',
